@@ -1,0 +1,66 @@
+diff --git a/dataset.py b/dataset.py
+index d087389..708369f 100644
+--- a/dataset.py
++++ b/dataset.py
+@@ -247,7 +247,7 @@ def keypoints17_to_coco18(kps):
+     neck_kp_vec = 0.5 * (kp_np[..., 5, :] + kp_np[..., 6, :])
+     kp_np = np.concatenate([kp_np, neck_kp_vec[..., None, :]], axis=-2)
+     opp_order = [0, 17, 6, 8, 10, 5, 7, 9, 12, 14, 16, 11, 13, 15, 2, 1, 4, 3]
+-    opp_order = np.array(opp_order, dtype=np.int)
++    opp_order = np.array(opp_order, dtype=int)
+     kp_coco18 = kp_np[..., opp_order, :]
+     return kp_coco18
+ 
+diff --git a/models/training.py b/models/training.py
+index 6fabb93..d058e02 100644
+--- a/models/training.py
++++ b/models/training.py
+@@ -90,7 +90,7 @@ class Trainer:
+     def load_checkpoint(self, filename):
+         filename = filename
+         try:
+-            checkpoint = torch.load(filename)
++            checkpoint = torch.load(filename, map_location=self.args.device, weights_only=False)
+             self.start_epoch = checkpoint['epoch']
+             self.model.load_state_dict(checkpoint['state_dict'], strict=False)
+             self.model.set_actnorm_init()
+diff --git a/train_eval.py b/train_eval.py
+index 4024fe4..7176cd0 100644
+--- a/train_eval.py
++++ b/train_eval.py
+@@ -1,7 +1,12 @@
+ import random
+ import numpy as np
+ import torch
+-from torch.utils.tensorboard import SummaryWriter
++try:
++    from torch.utils.tensorboard import SummaryWriter
++except ImportError:  # edgelab: tensorboard not installed; no-op writer
++    class SummaryWriter:
++        def add_scalar(self, *a, **k):
++            pass
+ from models.STG_NF.model_pose import STG_NF
+ from models.training import Trainer
+ from utils.data_utils import trans_list
+diff --git a/utils/pose_utils.py b/utils/pose_utils.py
+index cab92ba..cbda99d 100644
+--- a/utils/pose_utils.py
++++ b/utils/pose_utils.py
+@@ -6,7 +6,7 @@ from PIL import Image
+ from matplotlib import pyplot as plt
+ from tqdm import tqdm
+ 
+-plt.style.use('seaborn-ticks')
++plt.style.use('seaborn-v0_8-ticks')
+ 
+ 
+ def get_ab_labels(global_data_np_ab, segs_meta_ab, path_to_vid_dir='', segs_root=''):
+@@ -163,7 +163,7 @@ def split_pose_to_segments(single_pose_np, single_pose_meta, single_pose_keys, s
+     pose_segs_np = np.empty([0, seg_len, kp_count, kp_dim])
+     pose_score_np = np.empty([0, seg_len])
+     pose_segs_meta = []
+-    num_segs = np.ceil((clip_t - seg_len) / seg_dist).astype(np.int)
++    num_segs = np.ceil((clip_t - seg_len) / seg_dist).astype(int)
+     single_pose_keys_sorted = sorted([int(i) for i in single_pose_keys])  # , key=lambda x: int(x))
+     for seg_ind in range(num_segs):
+         start_ind = start_ofst + seg_ind * seg_dist

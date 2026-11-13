@@ -1,0 +1,12 @@
+stage,person_count,is_synthetic_stress,backend,machine,threads,mean_ms,p50_ms,p95_ms,loadavg_1m,rss_mb
+decode_grayscale,0,False,OpenCV-CPU-1T,Anhs-MacBook-Pro.local,1,1.5628,1.575,1.7713,1.37,479.9
+observer_cheap_motion,0,False,NumPy-Downsample4x-1T,Anhs-MacBook-Pro.local,1,0.3659,0.3633,0.4457,1.37,481.0
+observer_pyramidal_lk,1,False,OpenCV-PyrLK-FB-1T,Anhs-MacBook-Pro.local,1,1.3502,1.342,1.5698,1.37,487.9
+observer_pyramidal_lk,5,False,OpenCV-PyrLK-FB-1T,Anhs-MacBook-Pro.local,1,2.1119,2.1186,2.3114,1.37,488.1
+observer_pyramidal_lk,10,True,OpenCV-PyrLK-FB-1T,Anhs-MacBook-Pro.local,1,3.5676,3.5781,3.9721,1.37,488.5
+scorer_stgnf_window,1,False,PyTorch-CPU-1T,Anhs-MacBook-Pro.local,1,1.0534,1.0437,1.1101,1.37,520.9
+scorer_stgnf_window,5,False,PyTorch-CPU-1T,Anhs-MacBook-Pro.local,1,1.819,1.8055,1.8975,1.37,521.2
+scorer_stgnf_window,10,True,PyTorch-CPU-1T,Anhs-MacBook-Pro.local,1,2.7727,2.7368,2.9234,1.37,521.4
+detector_ML0_ncnn_fp16_640,1,False,NCNN-FP16-384x640-VM,edge-os-vm,3,13.2872,11.947,18.6828,0.0,524.6
+tracker_botsort_update,1,False,BoT-SORT-CPU,edge-os-vm,1,0.2348,0.1976,0.4582,0.0,524.6
+detector_stock_ncnn_fp16_640,1,False,NCNN-FP16-384x640-VM,edge-os-vm,3,13.9711,11.4678,22.45,0.0,525.3

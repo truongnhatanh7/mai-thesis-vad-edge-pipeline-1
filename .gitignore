@@ -1,0 +1,35 @@
+# OS & Editor
+.DS_Store
+*.swp
+*~
+
+# Python / Virtualenv
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.ruff_cache/
+experiments/.venv/
+.venv/
+
+# Datasets and External Repos (can be downloaded online via SETUP.md)
+experiments/data
+data/
+experiments/third_party/
+
+# MLflow local database & heavy run artifacts (mlflow_runs.csv is tracked)
+experiments/mlruns/
+experiments/mlflow.db
+
+# Binary model weights and heavy arrays (LFS quota exceeded on free GitHub account; hashes & summaries are tracked)
+*.pt
+*.pth.tar
+*.onnx
+*.pkl
+*.npz
+
+# Large per-frame / per-decision raw logs and score arrays (summary/per_video/events CSVs & JSONs are tracked)
+experiments/EXP-023-observation-reuse/decisions.jsonl
+experiments/EXP-023-observation-reuse/scores/
+experiments/Q2-P1-*/decisions.jsonl
+experiments/Q2-P1-*/scores/

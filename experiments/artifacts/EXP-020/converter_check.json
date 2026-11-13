@@ -1,0 +1,22 @@
+{
+ "train2017": {
+  "converter_files": 64115,
+  "our_files": 64115,
+  "common": 64115,
+  "content_differs": 0,
+  "converter_only_files": 0,
+  "converter_only_nonempty": 0,
+  "ours_only_files": 0,
+  "first_differences": []
+ },
+ "val2017": {
+  "converter_files": 2693,
+  "our_files": 2693,
+  "common": 2693,
+  "content_differs": 0,
+  "converter_only_files": 0,
+  "converter_only_nonempty": 0,
+  "ours_only_files": 0,
+  "first_differences": []
+ }
+}

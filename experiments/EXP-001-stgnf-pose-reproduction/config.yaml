@@ -1,0 +1,38 @@
+# EXP-001 exact parameters (MLflow runs log the same values as params)
+machine: mac-m4pro-cpu-only
+stgnf:
+  repo: https://github.com/orhir/STG-NF
+  commit: edb5f3220332e160e4d20ce258787d5e2d7e0200
+  patch: stgnf-cpu.patch
+  checkpoint: checkpoints/ShanghaiTech_85_9.tar
+  checkpoint_sha256: 4950205cb5cdd3c4827e3214ac6c93dc7050c0d059c8325907cbe977360a70ca
+  dataset_flag: ShanghaiTech
+  seg_len: 24
+  test_seg_stride: 1
+  normalisation: [856, 480] then per-segment mean / y-std (their default)
+  device: cpu
+data:
+  stgnf_data_zip_sha256: b4ecd5b7b7d79ecd09b45a56295b8dd70914154ce7b1f1fb211bef2d5be0bb02
+  shanghaitech_frames: HF 123zdm/ShanghaiTech tar parts (sha256 in log.md), testing/frames (107 videos, 40791 frames)
+  gt: test_frame_mask (identical to STG-NF repo GT)
+pose_r2:
+  model: yolov8n-pose.pt
+  model_sha256: c6fa93dd1ee4a2c18c900a45c1d864a1c6f7aba75d84f91648a30b7fb641d212
+  tracker: botsort.yaml   # Ultralytics defaults, ReID off
+  imgsz: 640
+  conf: 0.25
+  iou: 0.7
+  ultralytics: 8.4.201
+scoring:
+  score_frame: {middle: 12, end: 23}   # frame of the segment that receives its score
+  smoothing:
+    none: {}
+    offline_gaussian: {sigmas: [1, 2, 3, 4, 5, 6]}   # STG-NF smooth_scores, uses future frames
+    causal_half_gaussian: {sigma: 9.539, truncate: 4.0}  # sqrt(91), past frames only
+    causal_ewma: {time_constant: 9.539}
+  metric: frame-level ROC-AUC over all concatenated test frames
+  bootstrap: {resamples: 2000, confidence: 0.95, unit: video, seed: 0}
+stage_cost:
+  video: 01_0014
+  torch_threads: [1, 2, 4]
+  opencv_threads: 1

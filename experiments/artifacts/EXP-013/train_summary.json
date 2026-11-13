@@ -1,0 +1,29 @@
+{
+ "epochs_run": 25,
+ "best_epoch": 20,
+ "best_val": {
+  "metrics/precision(B)": 0.94584,
+  "metrics/recall(B)": 0.90009,
+  "metrics/mAP50(B)": 0.95073,
+  "metrics/mAP50-95(B)": 0.71088,
+  "metrics/precision(P)": 0.87672,
+  "metrics/recall(P)": 0.78597,
+  "metrics/mAP50(P)": 0.80839,
+  "metrics/mAP50-95(P)": 0.48361
+ },
+ "last_val": {
+  "metrics/precision(B)": 0.93894,
+  "metrics/recall(B)": 0.90464,
+  "metrics/mAP50(B)": 0.95229,
+  "metrics/mAP50-95(B)": 0.70988,
+  "metrics/precision(P)": 0.87697,
+  "metrics/recall(P)": 0.7802,
+  "metrics/mAP50(P)": 0.80521,
+  "metrics/mAP50-95(P)": 0.48222
+ },
+ "best_fitness": 1.250953,
+ "weights": "/Users/nanh/Documents/RMIT_MscAI/thesis/experiments/artifacts/EXP-013/yolov8n-pose-sht-ft.pt",
+ "sha256": "f324b39e4cc9408166e396ba95eea52cdd692f27d324fbd20f11ff4c3a105fc3",
+ "init_weights": "/Users/nanh/Documents/RMIT_MscAI/thesis/experiments/artifacts/EXP-001/models/yolov8n-pose.pt",
+ "init_sha256": "c6fa93dd1ee4a2c18c900a45c1d864a1c6f7aba75d84f91648a30b7fb641d212"
+}

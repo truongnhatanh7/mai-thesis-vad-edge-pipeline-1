@@ -1,0 +1,11 @@
+--- a/utils/pose_utils.py
++++ b/utils/pose_utils.py
+@@ -96,7 +96,7 @@
+     else:
+         pose_segs_data_np = np.concatenate(pose_segs_data, axis=0)
+         score_segs_data_np = np.concatenate(score_segs_data, axis=0)
+-    global_pose_data_np = np.concatenate(global_pose_data, axis=0)
++    global_pose_data_np = np.concatenate(global_pose_data, axis=0) if global_pose_data else np.empty((0, 17, 3))
+     del pose_segs_data
+     # del global_pose_data
+     if ret_keys:

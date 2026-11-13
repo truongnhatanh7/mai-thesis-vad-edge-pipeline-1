@@ -1,0 +1,240 @@
+{
+ "recall": {
+  "yolov8n-pose (EXP-003)": {
+   "<32": {
+    "persons": 26890,
+    "found": 36
+   },
+   "32-48": {
+    "persons": 31200,
+    "found": 217
+   },
+   "48-64": {
+    "persons": 35505,
+    "found": 2017
+   },
+   "64-96": {
+    "persons": 52591,
+    "found": 32213
+   },
+   "96-160": {
+    "persons": 32228,
+    "found": 31047
+   },
+   ">=160": {
+    "persons": 8607,
+    "found": 8533
+   },
+   "all": {
+    "persons": 187021,
+    "found": 74063
+   }
+  },
+  "fine-tuned (EXP-013)": {
+   "<32": {
+    "persons": 26890,
+    "found": 22124
+   },
+   "32-48": {
+    "persons": 31200,
+    "found": 28448
+   },
+   "48-64": {
+    "persons": 35505,
+    "found": 34250
+   },
+   "64-96": {
+    "persons": 52591,
+    "found": 51727
+   },
+   "96-160": {
+    "persons": 32228,
+    "found": 31976
+   },
+   ">=160": {
+    "persons": 8607,
+    "found": 8542
+   },
+   "all": {
+    "persons": 187021,
+    "found": 177067
+   }
+  }
+ },
+ "classes": {
+  "yolov8n-pose (EXP-003)": {
+   "tracks": 1415,
+   "tracks_never_seen": 715,
+   "tracks_intermittent": 687,
+   "tracks_fully_matched": 13,
+   "person_frames": 187021,
+   "missed_person_frames": 112958,
+   "missed_in_never_seen": 57086,
+   "missed_in_intermittent": 55872,
+   "missed_in_intermittent_match_rate_ge_half": 12351,
+   "intermittent_share": 0.49462632128755823,
+   "never_seen_share": 0.5053736787124418,
+   "intermittent_share_match_rate_ge_half": 0.10934152516864676,
+   "missed_by_height_bin": {
+    "<32": {
+     "missed_never_seen": 22544,
+     "missed_intermittent": 4310
+    },
+    "32-48": {
+     "missed_never_seen": 20254,
+     "missed_intermittent": 10729
+    },
+    "48-64": {
+     "missed_never_seen": 12005,
+     "missed_intermittent": 21483
+    },
+    "64-96": {
+     "missed_never_seen": 2206,
+     "missed_intermittent": 18172
+    },
+    "96-160": {
+     "missed_never_seen": 76,
+     "missed_intermittent": 1105
+    },
+    ">=160": {
+     "missed_never_seen": 1,
+     "missed_intermittent": 73
+    }
+   }
+  },
+  "fine-tuned (EXP-013)": {
+   "tracks": 1415,
+   "tracks_never_seen": 163,
+   "tracks_intermittent": 930,
+   "tracks_fully_matched": 322,
+   "person_frames": 187021,
+   "missed_person_frames": 9954,
+   "missed_in_never_seen": 1481,
+   "missed_in_intermittent": 8473,
+   "missed_in_intermittent_match_rate_ge_half": 6972,
+   "intermittent_share": 0.8512155917219209,
+   "never_seen_share": 0.14878440827807918,
+   "intermittent_share_match_rate_ge_half": 0.70042194092827,
+   "missed_by_height_bin": {
+    "<32": {
+     "missed_never_seen": 1115,
+     "missed_intermittent": 3651
+    },
+    "32-48": {
+     "missed_never_seen": 259,
+     "missed_intermittent": 2493
+    },
+    "48-64": {
+     "missed_never_seen": 74,
+     "missed_intermittent": 1181
+    },
+    "64-96": {
+     "missed_never_seen": 27,
+     "missed_intermittent": 837
+    },
+    "96-160": {
+     "missed_never_seen": 5,
+     "missed_intermittent": 247
+    },
+    ">=160": {
+     "missed_never_seen": 1,
+     "missed_intermittent": 64
+    }
+   }
+  }
+ },
+ "classes_long_tracks": {
+  "yolov8n-pose (EXP-003)": {
+   "tracks": 1050,
+   "tracks_never_seen": 394,
+   "tracks_intermittent": 650,
+   "tracks_fully_matched": 6,
+   "person_frames": 184851,
+   "missed_person_frames": 110957,
+   "missed_in_never_seen": 55294,
+   "missed_in_intermittent": 55663,
+   "missed_in_intermittent_match_rate_ge_half": 12295,
+   "intermittent_share": 0.5016628063123553,
+   "never_seen_share": 0.4983371936876448,
+   "intermittent_share_match_rate_ge_half": 0.11080869165532593,
+   "missed_by_height_bin": {
+    "<32": {
+     "missed_never_seen": 21830,
+     "missed_intermittent": 4276
+    },
+    "32-48": {
+     "missed_never_seen": 19750,
+     "missed_intermittent": 10695
+    },
+    "48-64": {
+     "missed_never_seen": 11650,
+     "missed_intermittent": 21442
+    },
+    "64-96": {
+     "missed_never_seen": 2025,
+     "missed_intermittent": 18093
+    },
+    "96-160": {
+     "missed_never_seen": 39,
+     "missed_intermittent": 1085
+    },
+    ">=160": {
+     "missed_never_seen": 0,
+     "missed_intermittent": 72
+    }
+   }
+  },
+  "fine-tuned (EXP-013)": {
+   "tracks": 1050,
+   "tracks_never_seen": 12,
+   "tracks_intermittent": 808,
+   "tracks_fully_matched": 230,
+   "person_frames": 184851,
+   "missed_person_frames": 9022,
+   "missed_in_never_seen": 1103,
+   "missed_in_intermittent": 7919,
+   "missed_in_intermittent_match_rate_ge_half": 6761,
+   "intermittent_share": 0.8777432941698071,
+   "never_seen_share": 0.12225670583019287,
+   "intermittent_share_match_rate_ge_half": 0.7493903790733762,
+   "missed_by_height_bin": {
+    "<32": {
+     "missed_never_seen": 940,
+     "missed_intermittent": 3396
+    },
+    "32-48": {
+     "missed_never_seen": 141,
+     "missed_intermittent": 2329
+    },
+    "48-64": {
+     "missed_never_seen": 13,
+     "missed_intermittent": 1096
+    },
+    "64-96": {
+     "missed_never_seen": 9,
+     "missed_intermittent": 795
+    },
+    "96-160": {
+     "missed_never_seen": 0,
+     "missed_intermittent": 239
+    },
+    ">=160": {
+     "missed_never_seen": 0,
+     "missed_intermittent": 64
+    }
+   }
+  }
+ },
+ "decision": {
+  "yolov8n-pose (EXP-003)": {
+   "intermittent_share": 0.49462632128755823,
+   "threshold": 0.3,
+   "propose_tsm": true
+  },
+  "fine-tuned (EXP-013)": {
+   "intermittent_share": 0.8512155917219209,
+   "threshold": 0.3,
+   "propose_tsm": true
+  }
+ }
+}

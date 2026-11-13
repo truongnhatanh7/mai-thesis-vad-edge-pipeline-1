@@ -1,0 +1,11 @@
+{
+ "auc_paper": {
+  "released": 85.93709088366215,
+  "rtmpose-s": 86.12262058091633,
+  "rtmpose-t": 85.90617387937989,
+  "yolov8n-pose": 84.99327482688118
+ },
+ "O1_pass": true,
+ "O2_pass": true,
+ "exp016_pose_model": "rtmpose-s"
+}

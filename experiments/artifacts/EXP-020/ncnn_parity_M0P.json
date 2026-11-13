@@ -1,0 +1,454 @@
+{
+ "fp32": {
+  "rows": [
+   {
+    "frame": "132.jpg",
+    "conf": 0.1,
+    "n_ultralytics": 1,
+    "n_ort": 1,
+    "max_conf_diff": 5.364418029785156e-07,
+    "max_box_diff_px": 0.12005615234375,
+    "max_kpt_diff_px": 0.1619873046875
+   },
+   {
+    "frame": "132.jpg",
+    "conf": 0.25,
+    "n_ultralytics": 1,
+    "n_ort": 1,
+    "max_conf_diff": 5.364418029785156e-07,
+    "max_box_diff_px": 0.12005615234375,
+    "max_kpt_diff_px": 0.1619873046875
+   },
+   {
+    "frame": "216.jpg",
+    "conf": 0.1,
+    "n_ultralytics": 1,
+    "n_ort": 1,
+    "max_conf_diff": 6.109476089477539e-07,
+    "max_box_diff_px": 0.0702056884765625,
+    "max_kpt_diff_px": 0.0673065185546875
+   },
+   {
+    "frame": "216.jpg",
+    "conf": 0.25,
+    "n_ultralytics": 0,
+    "n_ort": 0,
+    "max_conf_diff": 0.0,
+    "max_box_diff_px": 0.0,
+    "max_kpt_diff_px": 0.0
+   },
+   {
+    "frame": "168.jpg",
+    "conf": 0.1,
+    "n_ultralytics": 0,
+    "n_ort": 0,
+    "max_conf_diff": 0.0,
+    "max_box_diff_px": 0.0,
+    "max_kpt_diff_px": 0.0
+   },
+   {
+    "frame": "168.jpg",
+    "conf": 0.25,
+    "n_ultralytics": 0,
+    "n_ort": 0,
+    "max_conf_diff": 0.0,
+    "max_box_diff_px": 0.0,
+    "max_kpt_diff_px": 0.0
+   },
+   {
+    "frame": "300.jpg",
+    "conf": 0.1,
+    "n_ultralytics": 3,
+    "n_ort": 3,
+    "max_conf_diff": 5.364418029785156e-07,
+    "max_box_diff_px": 0.117279052734375,
+    "max_kpt_diff_px": 0.1141357421875
+   },
+   {
+    "frame": "300.jpg",
+    "conf": 0.25,
+    "n_ultralytics": 3,
+    "n_ort": 3,
+    "max_conf_diff": 5.364418029785156e-07,
+    "max_box_diff_px": 0.117279052734375,
+    "max_kpt_diff_px": 0.1141357421875
+   },
+   {
+    "frame": "252.jpg",
+    "conf": 0.1,
+    "n_ultralytics": 5,
+    "n_ort": 5,
+    "max_conf_diff": 8.344650268554688e-07,
+    "max_box_diff_px": 0.11083984375,
+    "max_kpt_diff_px": 0.106475830078125
+   },
+   {
+    "frame": "252.jpg",
+    "conf": 0.25,
+    "n_ultralytics": 3,
+    "n_ort": 3,
+    "max_conf_diff": 8.344650268554688e-07,
+    "max_box_diff_px": 0.11083984375,
+    "max_kpt_diff_px": 0.106475830078125
+   },
+   {
+    "frame": "204.jpg",
+    "conf": 0.1,
+    "n_ultralytics": 4,
+    "n_ort": 4,
+    "max_conf_diff": 5.513429641723633e-07,
+    "max_box_diff_px": 0.115020751953125,
+    "max_kpt_diff_px": 0.110321044921875
+   },
+   {
+    "frame": "204.jpg",
+    "conf": 0.25,
+    "n_ultralytics": 3,
+    "n_ort": 3,
+    "max_conf_diff": 4.172325134277344e-07,
+    "max_box_diff_px": 0.115020751953125,
+    "max_kpt_diff_px": 0.110321044921875
+   },
+   {
+    "frame": "228.jpg",
+    "conf": 0.1,
+    "n_ultralytics": 5,
+    "n_ort": 5,
+    "max_conf_diff": 1.3709068298339844e-06,
+    "max_box_diff_px": 0.103759765625,
+    "max_kpt_diff_px": 0.100311279296875
+   },
+   {
+    "frame": "228.jpg",
+    "conf": 0.25,
+    "n_ultralytics": 1,
+    "n_ort": 1,
+    "max_conf_diff": 1.3709068298339844e-06,
+    "max_box_diff_px": 0.103759765625,
+    "max_kpt_diff_px": 0.100311279296875
+   },
+   {
+    "frame": "156.jpg",
+    "conf": 0.1,
+    "n_ultralytics": 2,
+    "n_ort": 2,
+    "max_conf_diff": 1.7285346984863281e-06,
+    "max_box_diff_px": 0.107666015625,
+    "max_kpt_diff_px": 0.102935791015625
+   },
+   {
+    "frame": "156.jpg",
+    "conf": 0.25,
+    "n_ultralytics": 2,
+    "n_ort": 2,
+    "max_conf_diff": 1.7285346984863281e-06,
+    "max_box_diff_px": 0.107666015625,
+    "max_kpt_diff_px": 0.102935791015625
+   },
+   {
+    "frame": "204.jpg",
+    "conf": 0.1,
+    "n_ultralytics": 1,
+    "n_ort": 1,
+    "max_conf_diff": 8.940696716308594e-08,
+    "max_box_diff_px": 0.09466552734375,
+    "max_kpt_diff_px": 0.091705322265625
+   },
+   {
+    "frame": "204.jpg",
+    "conf": 0.25,
+    "n_ultralytics": 1,
+    "n_ort": 1,
+    "max_conf_diff": 8.940696716308594e-08,
+    "max_box_diff_px": 0.09466552734375,
+    "max_kpt_diff_px": 0.091705322265625
+   },
+   {
+    "frame": "168.jpg",
+    "conf": 0.1,
+    "n_ultralytics": 0,
+    "n_ort": 0,
+    "max_conf_diff": 0.0,
+    "max_box_diff_px": 0.0,
+    "max_kpt_diff_px": 0.0
+   },
+   {
+    "frame": "168.jpg",
+    "conf": 0.25,
+    "n_ultralytics": 0,
+    "n_ort": 0,
+    "max_conf_diff": 0.0,
+    "max_box_diff_px": 0.0,
+    "max_kpt_diff_px": 0.0
+   },
+   {
+    "frame": "168.jpg",
+    "conf": 0.1,
+    "n_ultralytics": 3,
+    "n_ort": 3,
+    "max_conf_diff": 1.0728836059570312e-06,
+    "max_box_diff_px": 0.139068603515625,
+    "max_kpt_diff_px": 0.13470458984375
+   },
+   {
+    "frame": "168.jpg",
+    "conf": 0.25,
+    "n_ultralytics": 1,
+    "n_ort": 1,
+    "max_conf_diff": 0.0,
+    "max_box_diff_px": 0.139068603515625,
+    "max_kpt_diff_px": 0.13470458984375
+   },
+   {
+    "frame": "228.jpg",
+    "conf": 0.1,
+    "n_ultralytics": 3,
+    "n_ort": 3,
+    "max_conf_diff": 9.238719940185547e-07,
+    "max_box_diff_px": 0.077117919921875,
+    "max_kpt_diff_px": 0.07427978515625
+   },
+   {
+    "frame": "228.jpg",
+    "conf": 0.25,
+    "n_ultralytics": 0,
+    "n_ort": 0,
+    "max_conf_diff": 0.0,
+    "max_box_diff_px": 0.0,
+    "max_kpt_diff_px": 0.0
+   }
+  ],
+  "frames_x_conf": 24,
+  "equal_counts": 24,
+  "max_conf_diff": 1.7285346984863281e-06,
+  "max_kpt_diff_px": 0.1619873046875,
+  "count_ultralytics": 43,
+  "count_ncnn": 43
+ },
+ "fp16": {
+  "rows": [
+   {
+    "frame": "132.jpg",
+    "conf": 0.1,
+    "n_ultralytics": 1,
+    "n_ort": 1,
+    "max_conf_diff": 0.005703449249267578,
+    "max_box_diff_px": 0.16351318359375,
+    "max_kpt_diff_px": 0.695220947265625
+   },
+   {
+    "frame": "132.jpg",
+    "conf": 0.25,
+    "n_ultralytics": 1,
+    "n_ort": 1,
+    "max_conf_diff": 0.005703449249267578,
+    "max_box_diff_px": 0.16351318359375,
+    "max_kpt_diff_px": 0.695220947265625
+   },
+   {
+    "frame": "216.jpg",
+    "conf": 0.1,
+    "n_ultralytics": 1,
+    "n_ort": 1,
+    "max_conf_diff": 0.0034228861331939697,
+    "max_box_diff_px": 0.2506866455078125,
+    "max_kpt_diff_px": 0.3494873046875
+   },
+   {
+    "frame": "216.jpg",
+    "conf": 0.25,
+    "n_ultralytics": 0,
+    "n_ort": 0,
+    "max_conf_diff": 0.0,
+    "max_box_diff_px": 0.0,
+    "max_kpt_diff_px": 0.0
+   },
+   {
+    "frame": "168.jpg",
+    "conf": 0.1,
+    "n_ultralytics": 0,
+    "n_ort": 0,
+    "max_conf_diff": 0.0,
+    "max_box_diff_px": 0.0,
+    "max_kpt_diff_px": 0.0
+   },
+   {
+    "frame": "168.jpg",
+    "conf": 0.25,
+    "n_ultralytics": 0,
+    "n_ort": 0,
+    "max_conf_diff": 0.0,
+    "max_box_diff_px": 0.0,
+    "max_kpt_diff_px": 0.0
+   },
+   {
+    "frame": "300.jpg",
+    "conf": 0.1,
+    "n_ultralytics": 3,
+    "n_ort": 3,
+    "max_conf_diff": 0.0034543275833129883,
+    "max_box_diff_px": 0.2711181640625,
+    "max_kpt_diff_px": 0.381988525390625
+   },
+   {
+    "frame": "300.jpg",
+    "conf": 0.25,
+    "n_ultralytics": 3,
+    "n_ort": 3,
+    "max_conf_diff": 0.0034543275833129883,
+    "max_box_diff_px": 0.2711181640625,
+    "max_kpt_diff_px": 0.381988525390625
+   },
+   {
+    "frame": "252.jpg",
+    "conf": 0.1,
+    "n_ultralytics": 5,
+    "n_ort": 5,
+    "max_conf_diff": 0.005168825387954712,
+    "max_box_diff_px": 0.36334228515625,
+    "max_kpt_diff_px": 0.5767822265625
+   },
+   {
+    "frame": "252.jpg",
+    "conf": 0.25,
+    "n_ultralytics": 3,
+    "n_ort": 3,
+    "max_conf_diff": 0.005168825387954712,
+    "max_box_diff_px": 0.36334228515625,
+    "max_kpt_diff_px": 0.5767822265625
+   },
+   {
+    "frame": "204.jpg",
+    "conf": 0.1,
+    "n_ultralytics": 4,
+    "n_ort": 4,
+    "max_conf_diff": 0.005821526050567627,
+    "max_box_diff_px": 0.2181396484375,
+    "max_kpt_diff_px": 0.481414794921875
+   },
+   {
+    "frame": "204.jpg",
+    "conf": 0.25,
+    "n_ultralytics": 3,
+    "n_ort": 3,
+    "max_conf_diff": 0.005821526050567627,
+    "max_box_diff_px": 0.2181396484375,
+    "max_kpt_diff_px": 0.481414794921875
+   },
+   {
+    "frame": "228.jpg",
+    "conf": 0.1,
+    "n_ultralytics": 5,
+    "n_ort": 5,
+    "max_conf_diff": 0.004480436444282532,
+    "max_box_diff_px": 0.2992706298828125,
+    "max_kpt_diff_px": 0.5889892578125
+   },
+   {
+    "frame": "228.jpg",
+    "conf": 0.25,
+    "n_ultralytics": 1,
+    "n_ort": 1,
+    "max_conf_diff": 0.002698659896850586,
+    "max_box_diff_px": 0.1044158935546875,
+    "max_kpt_diff_px": 0.19528961181640625
+   },
+   {
+    "frame": "156.jpg",
+    "conf": 0.1,
+    "n_ultralytics": 2,
+    "n_ort": 2,
+    "max_conf_diff": 0.004250526428222656,
+    "max_box_diff_px": 0.38909912109375,
+    "max_kpt_diff_px": 0.732818603515625
+   },
+   {
+    "frame": "156.jpg",
+    "conf": 0.25,
+    "n_ultralytics": 2,
+    "n_ort": 2,
+    "max_conf_diff": 0.004250526428222656,
+    "max_box_diff_px": 0.38909912109375,
+    "max_kpt_diff_px": 0.732818603515625
+   },
+   {
+    "frame": "204.jpg",
+    "conf": 0.1,
+    "n_ultralytics": 1,
+    "n_ort": 1,
+    "max_conf_diff": 0.00839349627494812,
+    "max_box_diff_px": 0.1921234130859375,
+    "max_kpt_diff_px": 0.3330841064453125
+   },
+   {
+    "frame": "204.jpg",
+    "conf": 0.25,
+    "n_ultralytics": 1,
+    "n_ort": 1,
+    "max_conf_diff": 0.00839349627494812,
+    "max_box_diff_px": 0.1921234130859375,
+    "max_kpt_diff_px": 0.3330841064453125
+   },
+   {
+    "frame": "168.jpg",
+    "conf": 0.1,
+    "n_ultralytics": 0,
+    "n_ort": 0,
+    "max_conf_diff": 0.0,
+    "max_box_diff_px": 0.0,
+    "max_kpt_diff_px": 0.0
+   },
+   {
+    "frame": "168.jpg",
+    "conf": 0.25,
+    "n_ultralytics": 0,
+    "n_ort": 0,
+    "max_conf_diff": 0.0,
+    "max_box_diff_px": 0.0,
+    "max_kpt_diff_px": 0.0
+   },
+   {
+    "frame": "168.jpg",
+    "conf": 0.1,
+    "n_ultralytics": 3,
+    "n_ort": 3,
+    "max_conf_diff": 0.0032803863286972046,
+    "max_box_diff_px": 0.296112060546875,
+    "max_kpt_diff_px": 0.5250244140625
+   },
+   {
+    "frame": "168.jpg",
+    "conf": 0.25,
+    "n_ultralytics": 1,
+    "n_ort": 1,
+    "max_conf_diff": 0.0019284486770629883,
+    "max_box_diff_px": 0.296112060546875,
+    "max_kpt_diff_px": 0.5250244140625
+   },
+   {
+    "frame": "228.jpg",
+    "conf": 0.1,
+    "n_ultralytics": 3,
+    "n_ort": 3,
+    "max_conf_diff": 0.007023811340332031,
+    "max_box_diff_px": 0.27734375,
+    "max_kpt_diff_px": 0.42034912109375
+   },
+   {
+    "frame": "228.jpg",
+    "conf": 0.25,
+    "n_ultralytics": 0,
+    "n_ort": 0,
+    "max_conf_diff": 0.0,
+    "max_box_diff_px": 0.0,
+    "max_kpt_diff_px": 0.0
+   }
+  ],
+  "frames_x_conf": 24,
+  "equal_counts": 24,
+  "max_conf_diff": 0.00839349627494812,
+  "max_kpt_diff_px": 0.732818603515625,
+  "count_ultralytics": 43,
+  "count_ncnn": 43
+ }
+}

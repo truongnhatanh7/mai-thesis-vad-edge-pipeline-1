@@ -1,0 +1,54 @@
+{
+ "arm": "M00",
+ "epochs_planned": 4,
+ "epochs_run": 4,
+ "train_seconds_csv": 10389.4,
+ "final_val": {
+  "metrics/precision(B)": 0.83791,
+  "metrics/recall(B)": 0.77069,
+  "metrics/mAP50(B)": 0.86755,
+  "metrics/mAP50-95(B)": 0.62692,
+  "metrics/precision(P)": 0.81947,
+  "metrics/recall(P)": 0.66263,
+  "metrics/mAP50(P)": 0.71716,
+  "metrics/mAP50-95(P)": 0.39511
+ },
+ "final_train_loss": {
+  "train/box_loss": 1.03141,
+  "train/pose_loss": 3.50367,
+  "train/kobj_loss": 0.35067,
+  "train/cls_loss": 0.87674,
+  "train/dfl_loss": 1.21093
+ },
+ "per_epoch_val_mAP50-95(B)": [
+  0.46091,
+  0.55536,
+  0.59191,
+  0.62692
+ ],
+ "per_epoch_val_mAP50-95(P)": [
+  0.19901,
+  0.27916,
+  0.33939,
+  0.39511
+ ],
+ "weights": "/Users/nanh/Documents/RMIT_MscAI/thesis/experiments/artifacts/EXP-020/M00.pt",
+ "sha256": "d9dc4c743886621b803c3baae0f240df4b1f54f9767753adb97519d9ad959fff",
+ "start_weights": "/Users/nanh/Documents/RMIT_MscAI/thesis/experiments/artifacts/EXP-001/models/yolov8n-pose.pt",
+ "fixed_args": {
+  "imgsz": 640,
+  "batch": 16,
+  "workers": 4,
+  "device": "mps",
+  "seed": 0,
+  "patience": 100,
+  "plots": false,
+  "exist_ok": true,
+  "optimizer": "SGD",
+  "lr0": 0.01,
+  "warmup_epochs": 1.0,
+  "close_mosaic": 1
+ },
+ "fraction": 1.0,
+ "extra": {}
+}

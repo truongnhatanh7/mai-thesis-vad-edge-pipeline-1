@@ -1,0 +1,16 @@
+{
+  "parity_clips": 50,
+  "parity_max_abs_delta_prob": 1.3709068298339844e-06,
+  "parity_label_flips": 0,
+  "ort_t1_clip_p50_ms": 25.395271004526876,
+  "ort_t1_clip_p95_ms": 34.68008400450344,
+  "ort_t1_frame_p50_ms": 3.1744088755658595,
+  "ort_t2_clip_p50_ms": 12.22429199697217,
+  "ort_t2_clip_p95_ms": 13.333866341417888,
+  "ort_t2_frame_p50_ms": 1.5280364996215212,
+  "ort_t4_clip_p50_ms": 6.610000004002359,
+  "ort_t4_clip_p95_ms": 8.497556596557843,
+  "ort_t4_frame_p50_ms": 0.8262500005002948,
+  "onnx_bytes": 712828,
+  "run_id": "9a58548ac5ad414282c5b91b7764c0c0"
+}

@@ -1,0 +1,48 @@
+{
+ "arm": "ML0",
+ "epochs_planned": 1,
+ "epochs_run": 1,
+ "train_seconds_csv": 73.2628,
+ "final_val": {
+  "metrics/precision(B)": 0.7497,
+  "metrics/recall(B)": 0.52222,
+  "metrics/mAP50(B)": 0.60906,
+  "metrics/mAP50-95(B)": 0.378,
+  "metrics/precision(P)": 0.61825,
+  "metrics/recall(P)": 0.32894,
+  "metrics/mAP50(P)": 0.30749,
+  "metrics/mAP50-95(P)": 0.12096
+ },
+ "final_train_loss": {
+  "train/box_loss": 1.27759,
+  "train/pose_loss": 4.00305,
+  "train/kobj_loss": 0.35736,
+  "train/cls_loss": 1.06287,
+  "train/dfl_loss": 1.22845
+ },
+ "per_epoch_val_mAP50-95(B)": [
+  0.378
+ ],
+ "per_epoch_val_mAP50-95(P)": [
+  0.12096
+ ],
+ "weights": "/Users/nanh/Documents/RMIT_MscAI/thesis/experiments/artifacts/EXP-020/smoke-ML0.pt",
+ "sha256": "24293b6451d142fbecc177fee84c8239236c69fb6840f4677921336549cb713d",
+ "start_weights": "/Users/nanh/Documents/RMIT_MscAI/thesis/experiments/artifacts/EXP-001/models/yolov8n-pose.pt",
+ "fixed_args": {
+  "imgsz": 640,
+  "batch": 16,
+  "workers": 4,
+  "device": "mps",
+  "seed": 0,
+  "patience": 100,
+  "plots": false,
+  "exist_ok": true,
+  "optimizer": "SGD",
+  "lr0": 0.01,
+  "warmup_epochs": 1.0,
+  "close_mosaic": 1
+ },
+ "fraction": 0.25,
+ "extra": {}
+}

@@ -1,0 +1,54 @@
+{
+ "arm": "MLP",
+ "epochs_planned": 4,
+ "epochs_run": 4,
+ "train_seconds_csv": 23523.6,
+ "final_val": {
+  "metrics/precision(B)": 0.78695,
+  "metrics/recall(B)": 0.6062,
+  "metrics/mAP50(B)": 0.7061,
+  "metrics/mAP50-95(B)": 0.4673,
+  "metrics/precision(P)": 0.69491,
+  "metrics/recall(P)": 0.39983,
+  "metrics/mAP50(P)": 0.40338,
+  "metrics/mAP50-95(P)": 0.22316
+ },
+ "final_train_loss": {
+  "train/box_loss": 1.23696,
+  "train/pose_loss": 3.49065,
+  "train/kobj_loss": 0.35046,
+  "train/cls_loss": 1.00535,
+  "train/dfl_loss": 1.2068
+ },
+ "per_epoch_val_mAP50-95(B)": [
+  0.33867,
+  0.40475,
+  0.44072,
+  0.4673
+ ],
+ "per_epoch_val_mAP50-95(P)": [
+  0.10621,
+  0.15955,
+  0.19434,
+  0.22316
+ ],
+ "weights": "/Users/nanh/Documents/RMIT_MscAI/thesis/experiments/artifacts/EXP-020/MLP.pt",
+ "sha256": "13e35626cc00e040747ae36722c644eae862d2b03dd377abf37ed2e24bec5719",
+ "start_weights": "/Users/nanh/thesis-data/exp020/yolov8n-pose-p2-init.pt",
+ "fixed_args": {
+  "imgsz": 640,
+  "batch": 16,
+  "workers": 4,
+  "device": "mps",
+  "seed": 0,
+  "patience": 100,
+  "plots": false,
+  "exist_ok": true,
+  "optimizer": "SGD",
+  "lr0": 0.01,
+  "warmup_epochs": 1.0,
+  "close_mosaic": 1
+ },
+ "fraction": 1.0,
+ "extra": {}
+}

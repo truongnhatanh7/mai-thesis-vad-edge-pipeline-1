@@ -1,0 +1,14 @@
+# EXP-002 exact parameters (mirrors edgelab/models/train_clips.py constants; each MLflow run logs its own copy)
+decode: {fps: 25, size: 256, resize: plain (aspect not kept), frame_skip: 3, tool: ffmpeg scale flags=area}
+clips: {clip_len_T: 8, window_stride: 2, max_clips_per_video: 8, pad_short: repeat_last_frame}
+model: {name: SalmanCnnGru, num_classes: 2, dropout: 0.4, params: 177026, macs_per_frame: 0.0993e9}
+train: {optimizer: adam, lr: 1.0e-4, scheduler: cosine_annealing_tmax50, batch_size: 16, max_epochs: 50,
+        early_stopping: {monitor: val_loss, patience: 10}, checkpoint: best_val_acc, loss: cross_entropy, device: mps}
+augment: {hflip_p: 0.5, vflip_p: 0.5, rotation_deg: 15, brightness: 0.2, contrast: 0.2, noise_sigma: 0.01, per: clip}
+splits: {fractions: [0.70, 0.15, 0.15], stratified: label, seeds: [0, 1, 2],
+         protocols: {video: primary, leaky: ablation (clip-level shuffle)}, files: splits/<dataset>_<protocol>_seed<s>.json}
+eval: {threshold: 0.5, video_score: mean_clip_prob, bootstrap: {unit: video, resamples: 2000, confidence: 0.95, seed: 0}}
+onnx: {opset: 17, exporter: torchscript (dynamo=False), precision: fp32, parity_clips: 50, latency: {threads: [1, 2, 4], warmup: 10, repeats: 100}}
+datasets:
+  hockey-fight: {url: "https://www.kaggle.com/api/v1/datasets/download/yassershrief/hockey-fight-vidoes", sha256: a381924f46c5d9e550f8945a748a042fadfb5d70d4459a65d31e006439947a72}
+  rlvs: {url: "https://www.kaggle.com/api/v1/datasets/download/mohamedmustafa/real-life-violence-situations-dataset", sha256: 4fb2933dae16cf10ec441d7165fb8e31fc64676493fe8f66c55e359e1c211c74}
