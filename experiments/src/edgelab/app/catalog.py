@@ -1,10 +1,13 @@
 """Catalog of datasets, video examples, trained models, and precomputed experiment artifacts."""
 
 from dataclasses import dataclass, field
+import functools
 import json
 from pathlib import Path
+import re
 import cv2
 import numpy as np
+import pandas as pd
 
 from edgelab.pose.detcache import load_detections
 from edgelab.pose.evaluate import CHECKPOINT as SHT_CHECKPOINT, GT_DIR as SHT_GT_DIR
@@ -81,6 +84,19 @@ def build_model_catalog() -> list[ModelSpec]:
             backend="ultralytics",
             imgsz=640,
             sht_root=d / "exp020-ML0-sht",
+            ub_root=d / "exp020-ML0-ub",
+        ),
+        ModelSpec(
+            id="exp020-ML0-ncnn",
+            name="EXP-020 ML0: NCNN FP16 @640 (384x640 export, Q2-P1 locked front-end)",
+            category="EXP-020 (COCO 2x2 Ablation)",
+            experiment="EXP-020 / Q2-P1-E01..E05",
+            description="Same ML0 weights exported to NCNN FP16 (384x640 rect). This is the detector replayed by the Q2-P1 experiments on ShanghaiTech (UBnormal uses the `ML0_mps` proxy cache).",
+            weights_path=(vm_models / "exp020/ML0-640-384x640-ncnn") if (vm_models / "exp020/ML0-640-384x640-ncnn").exists() else None,
+            backend="ncnn",
+            imgsz=640,
+            sht_root=d / "exp020-ncnn",
+            sht_cache_prefix="L0_E0-ML0",
             ub_root=d / "exp020-ML0-ub",
         ),
         ModelSpec(
@@ -655,3 +671,451 @@ def load_dataset_summary_row(spec: ModelSpec, dataset: str, level: str = "L0", e
         if r.get("cache") == cname and r.get("c") == c and r.get("tracker") == "botsort" and r.get("variant") == variant:
             return r
     return None
+
+
+# ---------------------------------------------------------------- Experiment Catalog (EXP-000..023 + Q2-P1-E00..E07 + Pi 5)
+
+EXP_IDS: tuple[str, ...] = tuple(
+    id_ for i in range(0, 24) for id_ in ((f"EXP-{i:03d}", "EXP-010b") if i == 10 else (f"EXP-{i:03d}",))
+)
+Q2_IDS: tuple[str, ...] = (
+    "Q2-P1-E00", "Q2-P1-E01", "Q2-P1-E02", "Q2-P1-E03", "Q2-P1-E04", "Q2-P1-E05",
+    "Q2-P1-E06", "Q2-P1-E07", "Q2-P1-Pi5_huang_repro", "Q2-P1-Pi5_suite",
+)
+EXPERIMENT_IDS: tuple[str, ...] = EXP_IDS + Q2_IDS
+
+_RESULTS_FILES = ("results.csv", "per_video_results.csv")
+_EXP_DIR_RE = re.compile(r"^(EXP-\d{3}[a-z]?)-(.+)$")
+_Q2_DIR_RE = re.compile(r"^(Q2-P1-(?:E\d{2}|Pi5_[a-z0-9]+(?:_[a-z0-9]+)*?))(?:_([a-z0-9_]+))?$")
+
+
+def _split_experiment_dir(name: str) -> tuple[str, str] | None:
+    """Directory name -> (experiment id, title slug). `Q2-P1-E05_confirmation` -> (`Q2-P1-E05`, `confirmation`)."""
+    m = _EXP_DIR_RE.match(name)
+    if m:
+        return m.group(1), m.group(2)
+    if name.startswith("Q2-P1-Pi5_"):
+        return name, name.removeprefix("Q2-P1-Pi5_")  # the Pi 5 folders are addressed by their full name
+    m = re.match(r"^(Q2-P1-E\d{2})(?:_(.+))?$", name)
+    if m:
+        return m.group(1), m.group(2) or ""
+    return None
+
+
+@dataclass(frozen=True)
+class ExperimentSpec:
+    """One experiment folder (EXP-0xx or Q2-P1-*) and which machine-readable artefacts it holds."""
+
+    id: str
+    family: str  # "EXP" | "Q2-P1"
+    title: str
+    path: Path | None
+    files: tuple[str, ...] = ()
+
+    @property
+    def exists(self) -> bool:
+        return self.path is not None
+
+    def _first(self, names: tuple[str, ...]) -> Path | None:
+        if self.path is None:
+            return None
+        for n in names:
+            if n in self.files:
+                return self.path / n
+        return None
+
+    @property
+    def results_csv(self) -> Path | None:
+        return self._first(_RESULTS_FILES)
+
+    @property
+    def events_csv(self) -> Path | None:
+        return self._first(("events.csv",))
+
+    @property
+    def summary_json(self) -> Path | None:
+        return self._first(("summary.json",))
+
+    @property
+    def report_md(self) -> Path | None:
+        return self._first(("report.md", "results.md"))
+
+    @property
+    def plan_md(self) -> Path | None:
+        return self._first(("plan.md",))
+
+    @property
+    def status(self) -> str:
+        if not self.exists:
+            return "missing"
+        if self.results_csv or self.summary_json or self.events_csv:
+            return "results available"
+        if self.report_md:
+            return "report only"
+        return "planned / running (no results yet)"
+
+
+def build_experiment_catalog(root: Path | None = None) -> list[ExperimentSpec]:
+    """`EXP-000`..`EXP-023` followed by `Q2-P1-E00`..`E07`, `Q2-P1-Pi5_huang_repro`, `Q2-P1-Pi5_suite`.
+
+    Every expected id is listed even if its folder is missing (status `missing`), so the UI never silently drops one.
+    """
+    root = Path(root) if root is not None else EXPERIMENTS_ROOT
+    found: dict[str, tuple[str, Path]] = {}
+    if root.is_dir():
+        for p in sorted(root.iterdir()):
+            if not p.is_dir():
+                continue
+            parsed = _split_experiment_dir(p.name)
+            if parsed is not None:
+                found[parsed[0]] = (parsed[1], p)
+    specs: list[ExperimentSpec] = []
+    for exp_id in EXPERIMENT_IDS:
+        title, path = found.get(exp_id, ("", None))
+        files = tuple(sorted(f.name for f in path.iterdir() if f.is_file())) if path is not None else ()
+        specs.append(ExperimentSpec(
+            id=exp_id,
+            family="Q2-P1" if exp_id.startswith("Q2-P1") else "EXP",
+            title=title.replace("_", " "),
+            path=path,
+            files=files,
+        ))
+    return specs
+
+
+EXPERIMENT_BY_ID: dict[str, ExperimentSpec] = {e.id: e for e in build_experiment_catalog()}
+
+
+@functools.lru_cache(maxsize=16)
+def _read_csv_cached(path_str: str) -> pd.DataFrame:
+    return pd.read_csv(path_str, low_memory=False)
+
+
+def load_experiment_artifacts(exp_id: str) -> dict:
+    """`{"spec", "results", "events", "summary"}` for one experiment; missing artefacts are `None` (E06/E07 may not have results yet)."""
+    spec = EXPERIMENT_BY_ID[exp_id]
+    out: dict = {"spec": spec, "results": None, "events": None, "summary": None}
+    if spec.results_csv is not None:
+        out["results"] = _read_csv_cached(str(spec.results_csv))
+    if spec.events_csv is not None:
+        out["events"] = _read_csv_cached(str(spec.events_csv))
+    if spec.summary_json is not None:
+        try:
+            out["summary"] = json.loads(spec.summary_json.read_text())
+        except (OSError, ValueError):
+            out["summary"] = None
+    return out
+
+
+_AUC_COLUMNS = ("auc_all", "auc_confirmation", "auc_delivered", "auc_S4", "auc_S0", "auc_ideal", "auc_offline_S0", "auc_online", "value")
+_GROUP_COLUMNS = ("arm", "frontend", "schedule", "metric")
+
+
+def summarize_results_table(df: pd.DataFrame | None, max_rows: int = 40) -> pd.DataFrame | None:
+    """Compact leaderboard of a results table: mean of the first AUC-like column per arm/front-end/schedule (or per metric for the Pi 5 long format)."""
+    if df is None or df.empty:
+        return None
+    group = next((c for c in _GROUP_COLUMNS if c in df.columns), None)
+    metric = next((c for c in _AUC_COLUMNS if c in df.columns and pd.api.types.is_numeric_dtype(df[c])), None)
+    if group is None or metric is None:
+        return None
+    g = df.groupby(group, dropna=True)[metric].agg(["count", "mean", "min", "max"]).reset_index()
+    g = g.rename(columns={"mean": f"mean {metric}", "min": f"min {metric}", "max": f"max {metric}", "count": "rows"})
+    return g.sort_values(f"mean {metric}", ascending=False).head(max_rows).reset_index(drop=True)
+
+
+# ---------------------------------------------------------------- Dataset Explorer: splits, events, tags
+
+DATASET_FPS: dict[str, float] = {"ShanghaiTech": 24.0, "UBnormal": 30.0}
+SHORT_EVENT_S = 2.5  # Q2-P1-E05: short event = at most 2.5 s (60 frames SHT, 75 frames UB)
+Q2_AUDIT_CONFIG = EXPERIMENTS_ROOT / "Q2-P1-E00_audit/config.yaml"
+Q2_E05_EVENTS = EXPERIMENTS_ROOT / "Q2-P1-E05_confirmation/events.csv"
+SPLIT_NAMES = ("test_dev", "test_confirmation")
+TAG_ORDER = ("short_event", "sustained_event", "new_entry_near_onset", "sudden_fast_motion", "high_crowd")
+
+
+def native_fps(dataset: str) -> float:
+    return DATASET_FPS[dataset]
+
+
+def frames_to_seconds(frame: int | float, fps: float) -> float:
+    return float(frame) / float(fps)
+
+
+def gt_intervals(gt: np.ndarray) -> list[tuple[int, int]]:
+    """Maximal runs of anomalous frames of a 0/1 mask -> inclusive `(start_frame, end_frame)` pairs."""
+    g = np.asarray(gt).astype(bool).astype(np.int8)
+    if g.size == 0:
+        return []
+    d = np.diff(np.concatenate([[0], g, [0]]))
+    starts = np.flatnonzero(d == 1)
+    ends = np.flatnonzero(d == -1) - 1
+    return [(int(s), int(e)) for s, e in zip(starts, ends)]
+
+
+def interval_seconds(start: int, end: int, fps: float) -> tuple[float, float]:
+    """Inclusive frame interval -> `[t_start, t_end)` in seconds (the end frame lasts until the next frame boundary)."""
+    return start / fps, (end + 1) / fps
+
+
+def format_interval(start: int, end: int, fps: float) -> str:
+    t0, t1 = interval_seconds(start, end, fps)
+    return f"f{start}-{end} ({t0:.2f}-{t1:.2f} s)"
+
+
+@dataclass(frozen=True)
+class GtEvent:
+    index: int
+    start_frame: int  # inclusive
+    end_frame: int  # inclusive
+    duration_frames: int
+    start_s: float
+    end_s: float
+    duration_s: float
+    tags: tuple[str, ...]
+
+    @property
+    def mid_frame(self) -> int:
+        return (self.start_frame + self.end_frame) // 2
+
+    @property
+    def is_short(self) -> bool:
+        return "short_event" in self.tags
+
+    def label(self) -> str:
+        return f"#{self.index}  f{self.start_frame}-{self.end_frame}  ({self.start_s:.2f}-{self.end_s:.2f} s)  [{', '.join(self.tags)}]"
+
+
+def parse_split_config(config: dict, dataset: str) -> dict[str, str]:
+    """E00 `config.yaml` dict -> `{clip: "test_dev" | "test_confirmation"}` for one dataset."""
+    splits = config["datasets"][dataset]["splits"]
+    return {str(clip): name for name in SPLIT_NAMES for clip in splits.get(name, [])}
+
+
+@functools.lru_cache(maxsize=4)
+def load_split_map(dataset: str, config_path: Path = Q2_AUDIT_CONFIG) -> dict[str, str]:
+    """Clip -> split from `Q2-P1-E00_audit/config.yaml` (empty if the config is not there)."""
+    import yaml
+
+    if not Path(config_path).exists():
+        return {}
+    return parse_split_config(yaml.safe_load(Path(config_path).read_text()), dataset)
+
+
+@functools.lru_cache(maxsize=4)
+def load_event_tag_table(dataset: str, events_path: Path = Q2_E05_EVENTS) -> dict[str, list[dict]]:
+    """`{clip: [{start, end, short, new_entry_near_onset, fast_motion, high_crowd}, ...]}` from `Q2-P1-E05_confirmation/events.csv`.
+
+    The event definitions are identical for every arm/cell of that file, so the first (arm, cell) pair is used.
+    """
+    p = Path(events_path)
+    if not p.exists():
+        return {}
+    cols = ["dataset", "arm", "cell", "video", "start_frame", "end_frame", "short", "new_entry_near_onset", "fast_motion", "high_crowd"]
+    df = pd.read_csv(p, usecols=cols)
+    df = df[df["dataset"] == dataset]
+    if df.empty:
+        return {}
+    df = df[(df["arm"] == df["arm"].iloc[0]) & (df["cell"] == df["cell"].iloc[0])]
+    out: dict[str, list[dict]] = {}
+    for r in df.itertuples(index=False):
+        out.setdefault(str(r.video), []).append({
+            "start": int(r.start_frame), "end": int(r.end_frame), "short": bool(r.short),
+            "new_entry_near_onset": bool(r.new_entry_near_onset), "fast_motion": bool(r.fast_motion), "high_crowd": bool(r.high_crowd),
+        })
+    return out
+
+
+def event_tags(short: bool, new_entry: bool | None = None, fast: bool | None = None, crowd: bool | None = None) -> tuple[str, ...]:
+    """Subgroup tags in the E05 vocabulary (`None` = unknown, tag omitted)."""
+    tags = ["short_event" if short else "sustained_event"]
+    if new_entry:
+        tags.append("new_entry_near_onset")
+    if fast:
+        tags.append("sudden_fast_motion")
+    if crowd:
+        tags.append("high_crowd")
+    return tuple(tags)
+
+
+def build_gt_events(dataset: str, video_id: str, gt: np.ndarray | None = None,
+                    tag_table: dict[str, list[dict]] | None = None) -> list[GtEvent]:
+    """Ground-truth anomaly events of one clip (exact inclusive frame intervals + seconds + E05 subgroup tags)."""
+    fps = native_fps(dataset)
+    if gt is None:
+        gt = load_ground_truth(dataset, video_id)
+    if tag_table is None:
+        tag_table = load_event_tag_table(dataset)
+    known = {(e["start"], e["end"]): e for e in tag_table.get(video_id, [])}
+    short_frames = int(round(SHORT_EVENT_S * fps))
+    events = []
+    for i, (s, e) in enumerate(gt_intervals(gt)):
+        dur = e - s + 1
+        row = known.get((s, e))
+        if row is not None:
+            tags = event_tags(row["short"], row["new_entry_near_onset"], row["fast_motion"], row["high_crowd"])
+        else:
+            tags = event_tags(dur <= short_frames)
+        t0, t1 = interval_seconds(s, e, fps)
+        events.append(GtEvent(i, s, e, dur, t0, t1, dur / fps, tags))
+    return events
+
+
+def event_peak_frame(event: GtEvent, scores: np.ndarray | None = None) -> int:
+    """Peak frame of an event: argmax of `scores` inside the event, or the middle frame when no scores are given."""
+    if scores is None or len(scores) <= event.start_frame:
+        return event.mid_frame
+    seg = np.asarray(scores[event.start_frame:event.end_frame + 1], dtype=float)
+    if seg.size == 0 or not np.isfinite(seg).any():
+        return event.mid_frame
+    return int(event.start_frame + int(np.nanargmax(seg)))
+
+
+def build_clip_table(dataset: str, videos: list[VideoExample] | None = None) -> list[dict]:
+    """One row per test clip: split, scene, frame count, fps, duration, #events, exact intervals and subgroup tags."""
+    if videos is None:
+        videos = list_dataset_videos(dataset)
+    fps = native_fps(dataset)
+    splits = load_split_map(dataset)
+    tag_table = load_event_tag_table(dataset)
+    rows = []
+    for v in videos:
+        gt = load_ground_truth(dataset, v.video_id)
+        events = build_gt_events(dataset, v.video_id, gt, tag_table)
+        tags = sorted({t for ev in events for t in ev.tags}, key=lambda t: TAG_ORDER.index(t))
+        rows.append({
+            "clip": v.video_id,
+            "dataset": dataset,
+            "split": splits.get(v.video_id, "n/a"),
+            "scene": v.scene_id,
+            "frames": int(len(gt)),
+            "fps": fps,
+            "duration_s": round(len(gt) / fps, 2),
+            "anomalous_frames": int(gt.sum()),
+            "anomalous_pct": round(100.0 * float(gt.mean()), 1) if len(gt) else 0.0,
+            "n_events": len(events),
+            "n_short": sum(ev.is_short for ev in events),
+            "n_sustained": sum(not ev.is_short for ev in events),
+            "events": "; ".join(format_interval(ev.start_frame, ev.end_frame, fps) for ev in events) or "-",
+            "tags": ", ".join(tags),
+            "stratum": v.stratum,
+        })
+    return rows
+
+
+def summarize_clip_table(rows: list[dict]) -> dict:
+    """Dataset-level statistics of a `build_clip_table` result."""
+    if not rows:
+        return {"clips": 0}
+    frames = sum(r["frames"] for r in rows)
+    anomalous = sum(r["anomalous_frames"] for r in rows)
+    fps = rows[0]["fps"]
+    tag_counts = {t: 0 for t in TAG_ORDER}
+    for r in rows:
+        for t in r["tags"].split(", "):
+            if t:
+                tag_counts[t] += 1
+    return {
+        "clips": len(rows),
+        "clips_with_anomaly": sum(r["n_events"] > 0 for r in rows),
+        "scenes": len({r["scene"] for r in rows}),
+        "frames": frames,
+        "hours": frames / fps / 3600.0,
+        "fps": fps,
+        "anomalous_frames": anomalous,
+        "anomalous_ratio": anomalous / max(1, frames),
+        "events": sum(r["n_events"] for r in rows),
+        "short_events": sum(r["n_short"] for r in rows),
+        "sustained_events": sum(r["n_sustained"] for r in rows),
+        "test_dev_clips": sum(r["split"] == "test_dev" for r in rows),
+        "test_confirmation_clips": sum(r["split"] == "test_confirmation" for r in rows),
+        "clips_with_tag": tag_counts,
+    }
+
+
+# ---------------------------------------------------------------- Dataset Explorer: detection / skeleton overlay sources
+
+@dataclass(frozen=True)
+class OverlaySource:
+    key: str
+    label: str
+    model_id: str
+
+
+OVERLAY_SOURCES: tuple[OverlaySource, ...] = (
+    OverlaySource("released", "Released AlphaPose (reference poses)", "released-alphapose"),
+    OverlaySource("stock", "Stock YOLOv8n-pose @640", "stock-yolov8n-640"),
+    OverlaySource("ml0_ncnn", "ML0 NCNN @640", "exp020-ML0-ncnn"),
+    OverlaySource("mlp", "MLP @640", "exp020-MLP"),
+    OverlaySource("yolo26", "YOLO26n-pose @640", "exp017-yolo26n-640"),
+)
+OVERLAY_BY_KEY = {s.key: s for s in OVERLAY_SOURCES}
+HIGH_CONF = 0.20  # two-stage BoT-SORT first-association gate (Q2-P1 locked tracker: c=0.20, low=0.05)
+LOW_CONF = 0.05
+
+
+@functools.lru_cache(maxsize=8)
+def _cached_detection_frames(npz_str: str) -> tuple[list[dict], np.ndarray]:
+    frames, data = load_detections(Path(npz_str))
+    return frames, np.asarray(data.get("frame_ids", np.arange(len(frames))))
+
+
+@functools.lru_cache(maxsize=8)
+def _cached_tracked_poses(json_str: str) -> dict[int, list[dict]]:
+    return load_video_TrackedPoses(Path(json_str))
+
+
+def boxes_from_keypoints(kpts: np.ndarray, vis_thresh: float = 0.05) -> np.ndarray:
+    """(N,17,3) keypoints -> (N,4) xyxy boxes spanning the visible joints (zeros if none visible)."""
+    boxes = np.zeros((len(kpts), 4), dtype=np.float32)
+    for i, k in enumerate(kpts):
+        vis = k[k[:, 2] > vis_thresh]
+        if len(vis):
+            boxes[i] = (vis[:, 0].min(), vis[:, 1].min(), vis[:, 0].max(), vis[:, 1].max())
+    return boxes
+
+
+def overlay_availability(dataset: str, video_id: str) -> dict[str, str]:
+    """`{source key: where its detections come from}` for the sources that have artefacts for this clip."""
+    avail: dict[str, str] = {}
+    for src in OVERLAY_SOURCES:
+        spec = MODEL_BY_ID[src.model_id]
+        if spec.backend == "released":
+            p = find_pose_json(spec, dataset, video_id)
+            if p is not None:
+                avail[src.key] = f"released AlphaPose tracked poses ({p.name})"
+        else:
+            p = find_cache_npz(spec, dataset, video_id)
+            if p is not None:
+                avail[src.key] = f"detector cache {p.parent.parent.parent.name}/cache/{p.parent.name}"
+    return avail
+
+
+def load_overlay_detections(source_key: str, dataset: str, video_id: str, frame_idx: int,
+                            min_conf: float = LOW_CONF) -> dict | None:
+    """Boxes (N,4), confidences (N,), keypoints (N,17,3) of one source on one frame, keeping every detection with conf >= `min_conf`.
+
+    Detector caches store all detections with conf >= 0.01, so the 0.05..0.20 'recovery' boxes of the two-stage tracker are included.
+    Released AlphaPose has no per-box confidence: its pose score is used. Returns `None` when the artefact does not exist.
+    """
+    spec = MODEL_BY_ID[OVERLAY_BY_KEY[source_key].model_id]
+    if spec.backend == "released":
+        p = find_pose_json(spec, dataset, video_id)
+        if p is None:
+            return None
+        entries = _cached_tracked_poses(str(p)).get(frame_idx, [])
+        kpts = np.array([e["keypoints"] for e in entries], dtype=np.float32).reshape(-1, 17, 3)
+        conf = np.array([e["score"] for e in entries], dtype=np.float32)
+        return {"boxes": boxes_from_keypoints(kpts), "conf": conf, "keypoints": kpts,
+                "track_ids": [e["track_id"] for e in entries], "origin": "released AlphaPose tracked poses"}
+    p = find_cache_npz(spec, dataset, video_id)
+    if p is None:
+        return None
+    frames, _ = _cached_detection_frames(str(p))
+    if not 0 <= frame_idx < len(frames):
+        return {"boxes": np.zeros((0, 4), np.float32), "conf": np.zeros(0, np.float32), "keypoints": np.zeros((0, 17, 3), np.float32),
+                "track_ids": None, "origin": f"{p.parent.parent.parent.name}/cache/{p.parent.name}"}
+    f = frames[frame_idx]
+    keep = f["conf"] >= min_conf
+    return {"boxes": f["boxes"][keep].astype(np.float32), "conf": f["conf"][keep].astype(np.float32),
+            "keypoints": f["keypoints"][keep].astype(np.float32), "track_ids": None, "origin": f"{p.parent.parent.parent.name}/cache/{p.parent.name}"}

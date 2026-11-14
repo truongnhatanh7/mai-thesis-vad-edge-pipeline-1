@@ -207,6 +207,161 @@ def draw_poses_and_boxes(
     return canvas
 
 
+# ---------------------------------------------------------------- Height / confidence overlay (Dataset Explorer)
+
+# (low px inclusive, high px exclusive, label, BGR colour): the person-height bins of EXP-011 / EXP-020 recall tables
+HEIGHT_BINS = (
+    (0.0, 32.0, "<32 px", (60, 60, 255)),       # red
+    (32.0, 48.0, "32-48 px", (0, 140, 255)),    # orange
+    (48.0, 64.0, "48-64 px", (0, 225, 255)),    # yellow
+    (64.0, float("inf"), ">=64 px", (90, 210, 90)),  # green
+)
+HIGH_CONF_THRESH = 0.20  # two-stage BoT-SORT first association (locked tracker c = 0.20)
+LOW_CONF_THRESH = 0.05   # second association ("low" boxes 0.05 <= conf < 0.20 recover fragmented tracks)
+
+
+def height_bin_index(height_px: float) -> int:
+    """Index into `HEIGHT_BINS` for a person height in pixels (`<32`, `32-48`, `48-64`, `>=64`)."""
+    for i, (lo, hi, _, _) in enumerate(HEIGHT_BINS):
+        if lo <= height_px < hi:
+            return i
+    return 0
+
+
+def height_bin_label(height_px: float) -> str:
+    return HEIGHT_BINS[height_bin_index(height_px)][2]
+
+
+def confidence_class(conf: float, high: float = HIGH_CONF_THRESH, low: float = LOW_CONF_THRESH) -> str:
+    """`high` (conf >= 0.20), `low` (0.05 <= conf < 0.20: two-stage recovery box) or `ignored` (< 0.05)."""
+    if conf >= high:
+        return "high"
+    if conf >= low:
+        return "low"
+    return "ignored"
+
+
+def summarize_detections(boxes: np.ndarray | None, confs: np.ndarray | None,
+                         high: float = HIGH_CONF_THRESH, low: float = LOW_CONF_THRESH) -> dict:
+    """Counts of detections per `(height bin label, confidence class)`; `ignored` boxes (< `low`) are not counted."""
+    counts = {(b[2], c): 0 for b in HEIGHT_BINS for c in ("high", "low")}
+    heights: list[float] = []
+    if boxes is not None and confs is not None:
+        for box, conf in zip(boxes, confs):
+            cls = confidence_class(float(conf), high, low)
+            if cls == "ignored":
+                continue
+            h = float(box[3] - box[1])
+            heights.append(round(h, 1))
+            counts[(height_bin_label(h), cls)] += 1
+    return {
+        "counts": counts,
+        "n_high": sum(v for (_, c), v in counts.items() if c == "high"),
+        "n_low": sum(v for (_, c), v in counts.items() if c == "low"),
+        "n_small_lt48": sum(v for (b, _), v in counts.items() if b in ("<32 px", "32-48 px")),
+        "heights": heights,
+    }
+
+
+def _draw_dashed_rect(img: np.ndarray, p1: tuple[int, int], p2: tuple[int, int], color, thickness: int = 1, dash: int = 6) -> None:
+    (x1, y1), (x2, y2) = p1, p2
+    for x in range(x1, x2, dash * 2):
+        cv2.line(img, (x, y1), (min(x + dash, x2), y1), color, thickness, cv2.LINE_AA)
+        cv2.line(img, (x, y2), (min(x + dash, x2), y2), color, thickness, cv2.LINE_AA)
+    for y in range(y1, y2, dash * 2):
+        cv2.line(img, (x1, y), (x1, min(y + dash, y2)), color, thickness, cv2.LINE_AA)
+        cv2.line(img, (x2, y), (x2, min(y + dash, y2)), color, thickness, cv2.LINE_AA)
+
+
+def draw_height_conf_overlay(
+    img_bgr: np.ndarray,
+    boxes: np.ndarray | None,
+    confs: np.ndarray | None,
+    keypoints: np.ndarray | None = None,
+    kpt_conf_thresh: float = 0.2,
+    show_boxes: bool = True,
+    show_skeleton: bool = True,
+    show_labels: bool = True,
+    high_thresh: float = HIGH_CONF_THRESH,
+    low_thresh: float = LOW_CONF_THRESH,
+    title: str | None = None,
+    show_legend: bool = True,
+    gt_anomalous: bool | None = None,
+    highlight_boxes: np.ndarray | None = None,
+    highlight_label: str = "MISSED",
+) -> np.ndarray:
+    """Draw detections colour-coded by person height bin (`<32`, `32-48`, `48-64`, `>=64` px).
+
+    Solid thick boxes/skeletons = high-confidence (`conf >= high_thresh`); dashed thin boxes tagged `LOW` = the 0.05..0.20 boxes that only the
+    two-stage tracker's second association can use. Detections below `low_thresh` are not drawn.
+    """
+    canvas = img_bgr.copy()
+    n = len(boxes) if boxes is not None else 0
+    for i in range(n):
+        conf = float(confs[i]) if confs is not None and i < len(confs) else 1.0
+        cls = confidence_class(conf, high_thresh, low_thresh)
+        if cls == "ignored":
+            continue
+        box = boxes[i]
+        x1, y1, x2, y2 = (int(round(float(v))) for v in box)
+        h_px = max(0, y2 - y1)
+        color = HEIGHT_BINS[height_bin_index(h_px)][3]
+        thick = 2 if cls == "high" else 1
+        if show_boxes:
+            if cls == "high":
+                cv2.rectangle(canvas, (x1, y1), (x2, y2), color, thick, cv2.LINE_AA)
+            else:
+                _draw_dashed_rect(canvas, (x1, y1), (x2, y2), color, thick)
+            if show_labels:
+                label = f"{conf:.2f} {h_px}px" + (" LOW" if cls == "low" else "")
+                (tw, th), _ = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.38, 1)
+                ly = max(y1 - 3, th + 3)
+                cv2.rectangle(canvas, (x1, ly - th - 3), (x1 + tw + 4, ly + 2), color, -1)
+                cv2.putText(canvas, label, (x1 + 2, ly - 1), cv2.FONT_HERSHEY_SIMPLEX, 0.38, (15, 15, 15), 1, cv2.LINE_AA)
+        if show_skeleton and keypoints is not None and i < len(keypoints):
+            k = keypoints[i]
+            for a, b in COCO17_EDGES:
+                if k[a, 2] >= kpt_conf_thresh and k[b, 2] >= kpt_conf_thresh:
+                    cv2.line(canvas, (int(round(k[a, 0])), int(round(k[a, 1]))), (int(round(k[b, 0])), int(round(k[b, 1]))),
+                             color, thick, cv2.LINE_AA)
+            for j in range(len(k)):
+                if k[j, 2] >= kpt_conf_thresh:
+                    cv2.circle(canvas, (int(round(k[j, 0])), int(round(k[j, 1]))), 2 if cls == "high" else 1, (255, 255, 255), -1, cv2.LINE_AA)
+
+    if show_legend:
+        pad, row_h = 6, 16
+        entries = [(b[2], b[3]) for b in HEIGHT_BINS]
+        w_leg, h_leg = 128, pad * 2 + row_h * (len(entries) + 2)
+        overlay = canvas.copy()
+        cv2.rectangle(overlay, (4, 4), (4 + w_leg, 4 + h_leg), (20, 20, 20), -1)
+        cv2.addWeighted(overlay, 0.6, canvas, 0.4, 0, canvas)
+        for r, (name, col) in enumerate(entries):
+            y = 4 + pad + r * row_h + 10
+            cv2.rectangle(canvas, (10, y - 8), (24, y + 2), col, -1)
+            cv2.putText(canvas, name, (30, y), cv2.FONT_HERSHEY_SIMPLEX, 0.4, (240, 240, 240), 1, cv2.LINE_AA)
+        y = 4 + pad + len(entries) * row_h + 10
+        cv2.line(canvas, (10, y - 3), (24, y - 3), (240, 240, 240), 2, cv2.LINE_AA)
+        cv2.putText(canvas, f"conf>={high_thresh:.2f}", (30, y), cv2.FONT_HERSHEY_SIMPLEX, 0.38, (240, 240, 240), 1, cv2.LINE_AA)
+        _draw_dashed_rect(canvas, (10, y + row_h - 7), (24, y + row_h - 1), (240, 240, 240), 1, dash=3)
+        cv2.putText(canvas, f"{low_thresh:.2f}..{high_thresh:.2f}", (30, y + row_h), cv2.FONT_HERSHEY_SIMPLEX, 0.38, (240, 240, 240), 1, cv2.LINE_AA)
+
+    if highlight_boxes is not None:
+        for k, box in enumerate(np.asarray(highlight_boxes).reshape(-1, 4)):
+            x1, y1, x2, y2 = (int(round(float(v))) for v in box)
+            cv2.rectangle(canvas, (x1 - 4, y1 - 4), (x2 + 4, y2 + 4), (255, 255, 255), 1, cv2.LINE_AA)
+            if k == 0:
+                cv2.putText(canvas, highlight_label, (x1 - 4, y2 + 16), cv2.FONT_HERSHEY_SIMPLEX, 0.4, (255, 255, 255), 1, cv2.LINE_AA)
+
+    if gt_anomalous:
+        cv2.rectangle(canvas, (0, 0), (canvas.shape[1] - 1, canvas.shape[0] - 1), (60, 60, 255), 3)
+    if title:
+        (tw, th), _ = cv2.getTextSize(title, cv2.FONT_HERSHEY_SIMPLEX, 0.5, 1)
+        y0 = canvas.shape[0] - 8
+        cv2.rectangle(canvas, (4, y0 - th - 6), (4 + tw + 8, y0 + 4), (20, 20, 20), -1)
+        cv2.putText(canvas, title, (8, y0 - 2), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (240, 240, 240), 1, cv2.LINE_AA)
+    return canvas
+
+
 class LivePipelineSession:
     """Stateful live video processor: runs live pose detection -> BoT-SORT tracking -> online STG-NF window scoring."""
 

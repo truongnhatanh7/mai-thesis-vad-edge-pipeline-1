@@ -20,13 +20,22 @@ import pandas as pd
 from sklearn.metrics import roc_auc_score
 import streamlit as st
 
+from edgelab.app import diagnostics as diag
 from edgelab.app.catalog import (
     DATA_ROOT,
+    EXPERIMENT_BY_ID,
+    EXPERIMENT_IDS,
     MODEL_BY_ID,
+    OVERLAY_BY_KEY,
+    OVERLAY_SOURCES,
+    TAG_ORDER,
     ModelSpec,
     VideoExample,
+    build_clip_table,
+    build_gt_events,
     build_model_catalog,
     build_scorer_catalog,
+    event_peak_frame,
     find_cache_npz,
     find_pose_json,
     find_scores_npz,
@@ -36,13 +45,21 @@ from edgelab.app.catalog import (
     load_ground_truth,
     load_video_CachedDetections,
     load_video_FrameScores,
+    load_experiment_artifacts,
+    load_overlay_detections,
     load_video_TrackedPoses,
+    overlay_availability,
     read_video_frame,
+    summarize_clip_table,
+    summarize_results_table,
 )
 from edgelab.app.inference import (
+    HEIGHT_BINS,
     LivePipelineSession,
     apply_lighting_and_enhancer,
+    draw_height_conf_overlay,
     draw_poses_and_boxes,
+    summarize_detections,
     load_model_handle,
     run_live_pose_model,
 )
@@ -271,6 +288,511 @@ def render_model_panel(
     return annotated_rgb, info
 
 
+# ================================================================ Dataset Explorer & Failure Case Inspector (new tabs)
+
+DATASET_CHOICES = ["ShanghaiTech", "UBnormal"]
+HEIGHT_COLUMNS = {b[2]: f"{b[2]}" for b in HEIGHT_BINS}
+
+
+def tab_is_open(tab) -> bool:
+    """Lazy-tab helper: `st.tabs(..., on_change="rerun")` exposes `.open`; older Streamlit versions always render every tab."""
+    return getattr(tab, "open", True) is not False
+
+
+@st.cache_data(show_spinner="Scanning ground truth, splits and event tags...")
+def get_clip_table(dataset: str) -> list[dict]:
+    return build_clip_table(dataset, list_dataset_videos(dataset))
+
+
+@st.cache_data(show_spinner=False, max_entries=256)
+def get_raw_frame(dataset: str, clip: str, frame_idx: int):
+    return read_video_frame(dataset, clip, frame_idx)
+
+
+@st.cache_data(show_spinner=False)
+def get_overlay_avail(dataset: str, clip: str) -> dict[str, str]:
+    return overlay_availability(dataset, clip)
+
+
+@st.cache_data(show_spinner=False)
+def get_peak_scores(dataset: str, clip: str):
+    got = diag.get_clip_series(dataset, "ml0_s0", clip)
+    return None if got is None else got["score"]
+
+
+@st.cache_data(show_spinner="Ranking clips from the frozen Q2-P1 artefacts...")
+def get_failure_ranking(dataset: str, mode: str, variant: str, cell: str) -> pd.DataFrame:
+    if mode == "small_person":
+        return diag.rank_small_person_misses(dataset)
+    if mode == "fragmentation":
+        return diag.rank_track_fragmentation(dataset)
+    if mode == "scorer_limited":
+        return diag.rank_scorer_limited(dataset)
+    return diag.rank_scheduling(dataset, variant, cell)
+
+
+@st.cache_data(show_spinner="Building the diagnosis (detector caches + BoT-SORT replay)...")
+def get_case_context(dataset: str, mode: str, variant: str, cell: str, clip: str, event: int) -> dict:
+    if mode == "small_person":
+        return diag.build_small_person_context(dataset, clip)
+    if mode == "fragmentation":
+        return diag.build_fragmentation_context(dataset, clip)
+    df = get_failure_ranking(dataset, mode, variant, cell)
+    if mode == "scorer_limited":
+        row = df[(df["clip"] == clip) & (df["event"] == event)].iloc[0]
+        return diag.build_scorer_context(dataset, row)
+    row = df[df["clip"] == clip].iloc[0]
+    return diag.build_scheduling_context(dataset, variant, row)
+
+
+@st.cache_data(show_spinner="Replaying default vs two-stage BoT-SORT on the cached ML0 detections...")
+def get_active_window_frame(dataset: str, clip: str):
+    return diag.active_and_window_frame(dataset, clip)
+
+
+@st.cache_data(show_spinner=False)
+def get_experiment_artifacts(exp_id: str) -> dict:
+    return load_experiment_artifacts(exp_id)
+
+
+def set_state(key: str, value) -> None:
+    """Button callback: set a widget's session-state value before the widget is instantiated on the next run."""
+    st.session_state[key] = value
+
+
+def render_overlay_panel(source_key: str, dataset: str, clip: str, frame_idx: int, raw_bgr: np.ndarray, *, min_conf: float,
+                         show_boxes: bool, show_skeleton: bool, show_labels: bool, kpt_thresh: float, gt_flag: bool,
+                         highlight: np.ndarray | None = None, highlight_label: str = "MISSED"):
+    """Annotated RGB image + detection summary for one overlay source, or `(None, None)` if the source has no artefact for this clip."""
+    released = source_key == "released"
+    det = load_overlay_detections(source_key, dataset, clip, frame_idx, min_conf=0.0 if released else min_conf)
+    if det is None:
+        return None, None
+    low = 0.0 if released else min_conf
+    summ = summarize_detections(det["boxes"], det["conf"], low=low)
+    label = OVERLAY_BY_KEY[source_key].label
+    title = f"{label}: {summ['n_high']} high-conf + {summ['n_low']} low-conf"
+    bgr = draw_height_conf_overlay(
+        raw_bgr, det["boxes"], det["conf"], det["keypoints"], kpt_conf_thresh=kpt_thresh, show_boxes=show_boxes,
+        show_skeleton=show_skeleton, show_labels=show_labels, low_thresh=low, title=title, gt_anomalous=gt_flag,
+        highlight_boxes=highlight, highlight_label=highlight_label,
+    )
+    return cv2.cvtColor(bgr, cv2.COLOR_BGR2RGB), summ
+
+
+def detection_summary_table(rows: list[tuple[str, dict]]) -> pd.DataFrame:
+    out = []
+    for label, summ in rows:
+        r = {"Source": label, "high conf (>=0.20)": summ["n_high"], "low conf (0.05-0.20)": summ["n_low"]}
+        for b in HEIGHT_BINS:
+            r[b[2]] = summ["counts"][(b[2], "high")] + summ["counts"][(b[2], "low")]
+        r["< 48 px total"] = summ["n_small_lt48"]
+        out.append(r)
+    return pd.DataFrame(out)
+
+
+def overlay_controls(prefix: str) -> dict:
+    c1, c2, c3, c4 = st.columns(4)
+    return {
+        "min_conf": c1.slider("Lowest confidence drawn", 0.05, 0.50, 0.05, 0.05, key=f"{prefix}_minconf",
+                              help="0.05..0.20 boxes are the two-stage BoT-SORT 'low' boxes (dashed); >= 0.20 are high-confidence (solid)."),
+        "kpt_thresh": c2.slider("Keypoint visibility", 0.05, 0.80, 0.20, 0.05, key=f"{prefix}_kpt"),
+        "show_boxes": c3.checkbox("Boxes", value=True, key=f"{prefix}_boxes"),
+        "show_skeleton": c3.checkbox("Skeletons", value=True, key=f"{prefix}_skel"),
+        "show_labels": c4.checkbox("Labels (conf, height)", value=True, key=f"{prefix}_labels"),
+    }
+
+
+# ---------------------------------------------------------------- Dataset Explorer tab
+
+def render_dataset_explorer() -> None:
+    st.subheader("🗂️ Dataset Explorer — ShanghaiTech (107 test clips) & UBnormal (211 test clips)")
+    st.caption(
+        "Splits come from `Q2-P1-E00_audit/config.yaml`, event subgroup tags from `Q2-P1-E05_confirmation/events.csv`, ground truth from the STG-NF "
+        "`gt/` masks. Native cadence: ShanghaiTech 24 fps, UBnormal 30 fps."
+    )
+    dataset = st.radio("Dataset", DATASET_CHOICES, horizontal=True, key="de_dataset")
+    rows = get_clip_table(dataset)
+    if not rows:
+        st.error(f"No ground truth found for {dataset} under `{DATA_ROOT}`.")
+        return
+    summ = summarize_clip_table(rows)
+
+    m = st.columns(6)
+    m[0].metric("Test clips", summ["clips"], help=f"{summ['test_dev_clips']} test_dev + {summ['test_confirmation_clips']} test_confirmation")
+    m[1].metric("Scenes", summ["scenes"])
+    m[2].metric("Frames", f"{summ['frames']:,}", help=f"{summ['hours'] * 60:.1f} minutes at {summ['fps']:.0f} fps")
+    m[3].metric("Native FPS", f"{summ['fps']:.0f}")
+    m[4].metric("Anomalous frames", f"{summ['anomalous_frames']:,}", help=f"{100 * summ['anomalous_ratio']:.1f}% of all frames")
+    m[5].metric("GT events", summ["events"], help=f"{summ['short_events']} short (<= 2.5 s) + {summ['sustained_events']} sustained")
+    st.caption(
+        f"**Splits:** test_dev = {summ['test_dev_clips']} clips, test_confirmation = {summ['test_confirmation_clips']} clips · "
+        f"**Clips containing** " + " · ".join(f"`{t}`: {summ['clips_with_tag'][t]}" for t in TAG_ORDER)
+    )
+
+    df = pd.DataFrame(rows)
+    with st.expander("🔎 Filter the clip table", expanded=False):
+        f1, f2, f3, f4 = st.columns(4)
+        splits = f1.multiselect("Split", ["test_dev", "test_confirmation"], default=[], key=f"de_split_{dataset}")
+        scenes = f2.multiselect("Scene ID", sorted(df["scene"].unique(), key=lambda x: int(x) if str(x).isdigit() else x), default=[], key=f"de_scene_{dataset}")
+        tags = f3.multiselect("Event subgroup tag (any)", list(TAG_ORDER), default=[], key=f"de_tags_{dataset}")
+        only_anom = f4.checkbox("Only clips with anomalies", value=False, key=f"de_onlyanom_{dataset}")
+    mask = np.ones(len(df), dtype=bool)
+    if splits:
+        mask &= df["split"].isin(splits).to_numpy()
+    if scenes:
+        mask &= df["scene"].isin(scenes).to_numpy()
+    if tags:
+        mask &= df["tags"].apply(lambda s: any(t in s.split(", ") for t in tags)).to_numpy()
+    if only_anom:
+        mask &= (df["n_events"] > 0).to_numpy()
+    view = df[mask].reset_index(drop=True)
+    st.dataframe(
+        view[["clip", "split", "scene", "frames", "fps", "duration_s", "anomalous_frames", "anomalous_pct", "n_events", "n_short", "n_sustained", "events", "tags"]],
+        width="stretch", hide_index=True, height=260,
+    )
+    if view.empty:
+        st.warning("No clip matches the filters.")
+        return
+
+    clip_key = f"de_clip_{dataset}"
+    options = view["clip"].tolist()
+    if st.session_state.get(clip_key) not in options:
+        st.session_state[clip_key] = options[0]
+    info = {r["clip"]: r for r in rows}
+    clip = st.selectbox(
+        f"Clip ({len(options)} shown)", options, key=clip_key,
+        format_func=lambda c: f"{c} — {info[c]['frames']} frames, {info[c]['n_events']} event(s), {info[c]['split']}",
+    )
+    row = info[clip]
+    fps = row["fps"]
+    gt = load_ground_truth(dataset, clip)
+    events = build_gt_events(dataset, clip, gt)
+
+    c1, c2, c3, c4, c5 = st.columns(5)
+    c1.metric("Split", row["split"].replace("test_", ""))
+    c2.metric("Scene ID", row["scene"])
+    c3.metric("Frames", row["frames"], help=f"{row['duration_s']:.2f} s at {fps:.0f} fps")
+    c4.metric("Anomalous frames", f"{row['anomalous_frames']} ({row['anomalous_pct']:.0f}%)")
+    c5.metric("GT events", row["n_events"])
+
+    if events:
+        st.dataframe(pd.DataFrame([{
+            "event": e.index, "start frame": e.start_frame, "end frame": e.end_frame, "start (s)": round(e.start_s, 2), "end (s)": round(e.end_s, 2),
+            "duration (frames)": e.duration_frames, "duration (s)": round(e.duration_s, 2), "subgroup tags": ", ".join(e.tags),
+        } for e in events]), width="stretch", hide_index=True)
+    else:
+        st.info("This clip has no ground-truth anomaly (normal clip).")
+
+    # ---------------- Frame & skeleton overlay viewer
+    st.markdown("#### 🖼️ Frame & Skeleton Overlay Viewer")
+    n_frames = len(gt)
+    fkey = f"de_frame_{dataset}_{clip}"
+    peak_scores = get_peak_scores(dataset, clip)
+    default_frame = event_peak_frame(events[0], peak_scores) if events else n_frames // 2
+    if fkey not in st.session_state or st.session_state[fkey] >= n_frames:
+        st.session_state[fkey] = int(default_frame)
+
+    if events:
+        st.caption("Jump to each ground-truth event: **▶ start** = first anomalous frame, **★ peak** = frame with the highest ML0 offline (S0) anomaly score inside the event.")
+        per_row = 4
+        for chunk_start in range(0, len(events), per_row):
+            chunk = events[chunk_start:chunk_start + per_row]
+            cols = st.columns(len(chunk) * 2)
+            for j, ev in enumerate(chunk):
+                cols[2 * j].button(f"▶ E{ev.index} start (f{ev.start_frame})", key=f"de_start_{dataset}_{clip}_{ev.index}", width="stretch",
+                                   on_click=set_state, args=(fkey, ev.start_frame))
+                cols[2 * j + 1].button(f"★ E{ev.index} peak (f{event_peak_frame(ev, peak_scores)})", key=f"de_peak_{dataset}_{clip}_{ev.index}", width="stretch",
+                                       on_click=set_state, args=(fkey, event_peak_frame(ev, peak_scores)))
+    frame_idx = st.slider(f"Frame ({clip}: {n_frames} frames, {n_frames / fps:.1f} s)", 0, max(0, n_frames - 1), key=fkey)
+    in_event = next((e for e in events if e.start_frame <= frame_idx <= e.end_frame), None)
+    st.markdown(
+        f"**Frame {frame_idx}** · t = {frame_idx / fps:.2f} s · "
+        + (f"🔴 **inside GT event {in_event.index}** ({', '.join(in_event.tags)})" if in_event else "🟢 normal frame")
+    )
+
+    avail = get_overlay_avail(dataset, clip)
+    keys = [s.key for s in OVERLAY_SOURCES if s.key in avail]
+    if not keys:
+        st.warning("No detector cache / pose artefacts found for this clip.")
+        return
+    defaults = [k for k in ("stock", "ml0_ncnn") if k in keys] or keys[:2]
+    ctl1, ctl2 = st.columns([3, 1.4])
+    chosen = ctl1.multiselect("Overlay sources (detections + skeletons)", keys, default=defaults, key=f"de_models_{dataset}",
+                              format_func=lambda k: OVERLAY_BY_KEY[k].label)
+    layout = ctl2.radio("Layout", ["Side by side", "Toggle (one at a time)"], key=f"de_layout_{dataset}", horizontal=False)
+    ov = overlay_controls("de")
+    if not chosen:
+        st.info("Select at least one overlay source.")
+    else:
+        raw = get_raw_frame(dataset, clip, frame_idx)
+        if raw is None:
+            st.error(f"Could not read frame {frame_idx} of `{clip}`.")
+        else:
+            show = chosen
+            if layout.startswith("Toggle"):
+                pick = st.radio("Show", chosen, horizontal=True, key=f"de_toggle_{dataset}", format_func=lambda k: OVERLAY_BY_KEY[k].label)
+                show = [pick]
+            summaries: list[tuple[str, dict]] = []
+            rendered = []
+            for k in chosen:  # always summarise every chosen source so the table compares them all
+                rgb, sm = render_overlay_panel(k, dataset, clip, frame_idx, raw, gt_flag=bool(gt[frame_idx]), **ov)
+                if sm is not None:
+                    summaries.append((OVERLAY_BY_KEY[k].label, sm))
+                    if k in show:
+                        rendered.append((k, rgb))
+            per_line = 1 if layout.startswith("Toggle") else min(3, max(1, len(rendered)))
+            for i in range(0, len(rendered), per_line):
+                cols = st.columns(per_line)
+                for col, (k, rgb) in zip(cols, rendered[i:i + per_line]):
+                    col.image(rgb, width="stretch")
+                    col.caption(f"`{avail[k]}`")
+            if summaries:
+                st.dataframe(detection_summary_table(summaries), width="stretch", hide_index=True)
+                stock_s = dict(summaries).get(OVERLAY_BY_KEY["stock"].label)
+                ml0_s = dict(summaries).get(OVERLAY_BY_KEY["ml0_ncnn"].label)
+                if stock_s is not None and ml0_s is not None:
+                    st.info(
+                        f"**Why stock misses small people:** at this frame stock finds **{stock_s['n_small_lt48']}** person(s) < 48 px, ML0 finds **{ml0_s['n_small_lt48']}**. "
+                        f"ML0 also exposes **{ml0_s['n_low']}** low-confidence (0.05–0.20, dashed) box(es); the locked two-stage BoT-SORT associates those in its second pass "
+                        "to bridge gaps, whereas the default single-stage tracker (gate 0.25) never sees them."
+                    )
+
+    # ---------------- Timeline
+    st.markdown("#### 📈 Ground truth vs anomaly score")
+    series_ids = [s for s in ("stock", "ml0_s0", "ml0_s4") if diag.get_clip_series(dataset, s, clip) is not None]
+    tf, _, _ = diag.build_timeline_frame(dataset, clip, series_ids, y_mode="minmax")
+    chart = diag.make_timeline_chart(tf, events, cursor_frame=frame_idx, y_title="min-max score (shape only)", n_frames=n_frames, height=240)
+    if chart is not None:
+        st.altair_chart(chart, width="stretch")
+    st.caption("Red bands = ground-truth anomaly intervals; the orange rule is the frame selected above.")
+
+
+# ---------------------------------------------------------------- Failure Case Inspector tab
+
+def render_experiment_browser() -> None:
+    with st.expander("📚 Experiment catalog — EXP-000..EXP-023 and Q2-P1-E00..E07, Pi5_huang_repro, Pi5_suite", expanded=False):
+        status_icon = {"results available": "✅", "report only": "📝", "missing": "❌"}
+        exp_id = st.selectbox(
+            "Experiment", list(EXPERIMENT_IDS), index=list(EXPERIMENT_IDS).index("Q2-P1-E05") if "Q2-P1-E05" in EXPERIMENT_IDS else 0, key="fi_exp_id",
+            format_func=lambda e: f"{status_icon.get(EXPERIMENT_BY_ID[e].status, '⏳')} {e} — {EXPERIMENT_BY_ID[e].title} [{EXPERIMENT_BY_ID[e].status}]",
+        )
+        art = get_experiment_artifacts(exp_id)
+        spec = art["spec"]
+        st.caption(f"`{spec.path}` · files: {', '.join(spec.files) if spec.files else '—'}")
+        res, ev, summary = art["results"], art["events"], art["summary"]
+        if res is None and ev is None and summary is None:
+            st.info("No machine-readable results in this folder yet (planned or still running); see its `plan.md` / `report.md`.")
+        if res is not None:
+            if "metric" in res.columns and "value" in res.columns:
+                metric = st.selectbox("Metric", sorted(res["metric"].dropna().unique()),
+                                      index=sorted(res["metric"].dropna().unique()).index("queue_wait_p99_ms") if "queue_wait_p99_ms" in set(res["metric"]) else 0, key=f"fi_metric_{exp_id}")
+                st.dataframe(res[res["metric"] == metric].drop(columns=["metric"]), width="stretch", hide_index=True, height=240)
+            else:
+                lb = summarize_results_table(res)
+                if lb is not None:
+                    st.markdown("**Leaderboard (mean over rows)**")
+                    st.dataframe(lb, width="stretch", hide_index=True, height=240)
+                with st.expander(f"results table preview ({len(res):,} rows × {res.shape[1]} columns)"):
+                    st.dataframe(res.head(200), width="stretch", hide_index=True)
+        if ev is not None:
+            with st.expander(f"events.csv preview ({len(ev):,} rows)"):
+                st.dataframe(ev.head(200), width="stretch", hide_index=True)
+        if summary is not None:
+            if isinstance(summary.get("arms"), list):
+                keep = ["arm", "backend", "imgsz", "throughput_fps", "Sustainable_24fps", "service_ms_mean", "queue_wait_ms_p99", "late_windows_dropped",
+                        "c1_hit_rate_pct", "guard_shed_pct", "energy_j_per_frame", "causal_ideal_auc_sht"]
+                arms = pd.DataFrame(summary["arms"])
+                st.markdown("**Pi 5 reproduction arms (summary.json)**")
+                st.dataframe(arms[[c for c in keep if c in arms.columns]], width="stretch", hide_index=True)
+            with st.expander("summary.json"):
+                st.json(summary, expanded=False)
+        report = spec.report_md
+        if report is not None:
+            with st.expander(f"{report.name} (first 6,000 characters)"):
+                st.markdown(report.read_text()[:6000])
+
+
+def case_frame_panel(dataset: str, clip: str, frame_idx: int, mode: str, ctx: dict, events, ov: dict) -> None:
+    """Annotated frames for a failure case: stock vs ML0 (mode 1), ML0 with low boxes (mode 2) or ML0 (modes 3-4)."""
+    raw = get_raw_frame(dataset, clip, frame_idx)
+    if raw is None:
+        st.error(f"Could not read frame {frame_idx} of `{clip}`.")
+        return
+    gt = load_ground_truth(dataset, clip)
+    gt_flag = bool(gt[frame_idx]) if frame_idx < len(gt) else False
+    avail = get_overlay_avail(dataset, clip)
+    if mode == "small_person":
+        sources = [k for k in ("stock", "ml0_ncnn") if k in avail]
+    elif mode == "fragmentation":
+        sources = [k for k in ("ml0_ncnn",) if k in avail]
+    else:
+        sources = [k for k in ("ml0_ncnn", "released") if k in avail][:1]
+    if not sources:
+        st.warning("No detector cache available for this clip.")
+        return
+    highlight = None
+    label = "MISSED BY STOCK"
+    if mode == "small_person" and ctx.get("focus_boxes") is not None and frame_idx == ctx.get("focus_frame"):
+        highlight = ctx["focus_boxes"]
+    if mode == "fragmentation":
+        bridge = [b for b in ctx.get("bridge_frames", []) if b["frame"] == frame_idx]
+        if bridge:
+            ml0_det = load_overlay_detections("ml0_ncnn", dataset, clip, frame_idx, min_conf=0.05)
+            if ml0_det is not None:
+                low_sel = [(c >= 0.05) and (c < 0.20) for c in ml0_det["conf"]]
+                highlight = ml0_det["boxes"][np.array(low_sel, dtype=bool)] if any(low_sel) else None
+                label = "LOW BOX BRIDGES GAP"
+    cols = st.columns(len(sources))
+    summaries = []
+    for col, k in zip(cols, sources):
+        rgb, sm = render_overlay_panel(k, dataset, clip, frame_idx, raw, gt_flag=gt_flag, highlight=highlight if k != "stock" else None,
+                                       highlight_label=label, **ov)
+        if rgb is not None:
+            col.image(rgb, width="stretch")
+            summaries.append((OVERLAY_BY_KEY[k].label, sm))
+    if summaries:
+        st.dataframe(detection_summary_table(summaries), width="stretch", hide_index=True)
+
+
+def render_failure_inspector() -> None:
+    st.subheader("🩺 Model & Experiment Failure Case Inspector (Q2-P1 E00–E07 + physical Raspberry Pi 5)")
+    st.caption(
+        "Reads frozen Q2-P1 artefacts only (results/events/summary files, simulation pickles, E01 per-frame series, detector caches and the finished "
+        "physical-Pi-5 traces). Nothing is trained and the Pi 5 is never contacted. **E06 / E07 appear in the catalog but have no result tables yet.**"
+    )
+    render_experiment_browser()
+
+    top1, top2, top3, top4 = st.columns([1.1, 2.6, 1.9, 1.2])
+    dataset = top1.radio("Dataset", DATASET_CHOICES, key="fi_dataset")
+    mode = top2.selectbox("Failure mode", list(diag.FAILURE_MODES), format_func=diag.FAILURE_MODES.get, key="fi_mode")
+    variant, cell = "", diag.DEFAULT_BUDGET_CELL
+    if mode == "scheduling":
+        variant = top3.selectbox("Scheduling / caching case", list(diag.SCHEDULING_VARIANTS), format_func=diag.SCHEDULING_VARIANTS.get, key="fi_variant")
+        if variant in ("motion_only", "joint", "cache_helps", "cache_hurts"):
+            cell = top4.selectbox("Budget cell (s, β)", list(diag.BUDGET_CELLS), index=list(diag.BUDGET_CELLS).index(diag.DEFAULT_BUDGET_CELL), key="fi_cell",
+                                  help="s = Pi slowdown multiplier, β = CPU budget fraction of full-rate K=1 (E03/E05 cells).")
+    else:
+        top3.caption({
+            "small_person": "Ranked by clip-AUC gain ML0 − stock (E01 causal S4, same default tracker).",
+            "fragmentation": "Ranked by clip-AUC gain two-stage − default BoT-SORT (E05, native-speed cell).",
+            "scorer_limited": "Events with scorable windows on ≥ 50% of frames where Full-Rate K=1 never alerts.",
+        }[mode])
+
+    ranking = get_failure_ranking(dataset, mode, variant, cell)
+    if ranking is None or ranking.empty:
+        st.warning("No cases available for this selection (missing artefacts, or this case only exists for ShanghaiTech Pi 5 live clips).")
+        return
+
+    f1, f2 = st.columns([1.3, 2])
+    split_f = f1.selectbox("Split", ["all", "test_dev", "test_confirmation"], key="fi_split")
+    table = ranking if split_f == "all" else ranking[ranking["split"] == split_f]
+    if mode == "scorer_limited":
+        only_silent = f2.checkbox("Only tracked-but-silent events (scorer-limited)", value=True, key="fi_silent")
+        if only_silent:
+            table = table[table["tracked_but_silent"]]
+        table = table.sort_values(["coverage", "duration_frames"], ascending=False)
+        short_only = f2.checkbox("Only short (< 2.5 s) events", value=False, key="fi_short")
+        if short_only:
+            table = table[table["tags"].str.contains("short_event")]
+    table = table.reset_index(drop=True)
+    if table.empty:
+        st.info("No case matches the filters.")
+        return
+    st.markdown(f"**{len(table)} candidate case(s)** — click a row to inspect it (top row selected by default).")
+    sel_key = f"fi_table_{dataset}_{mode}_{variant}_{cell}_{split_f}"
+    event = st.dataframe(table.head(300), width="stretch", hide_index=True, height=250, on_select="rerun", selection_mode="single-row", key=sel_key)
+    picked = event.selection.rows[0] if event is not None and event.selection.rows else 0
+    row = table.iloc[min(picked, len(table) - 1)]
+    clip = str(row["clip"])
+    ev_idx = int(row["event"]) if "event" in row.index else -1
+
+    gt = load_ground_truth(dataset, clip)
+    events = build_gt_events(dataset, clip, gt)
+    ctx = get_case_context(dataset, mode, variant, cell, clip, ev_idx)
+    dx = diag.diagnose_case(mode, ctx, variant or None)
+
+    st.markdown(f"### Case: `{clip}` ({dataset}, {row['split']})" + (f" · event {ev_idx}" if ev_idx >= 0 else ""))
+    left, right = st.columns([1.6, 1.0])
+    with right:
+        box = {"failed": st.error, "succeeded": st.success, "mixed": st.warning, "info": st.info}[dx.verdict]
+        box(f"**Why this case {'failed' if dx.verdict == 'failed' else 'succeeded' if dx.verdict == 'succeeded' else 'is ambiguous'} — {dx.headline}**")
+        for b in dx.bullets:
+            st.markdown(f"- {b}")
+        st.markdown(f"**Mechanism.** {dx.mechanism}")
+    with left:
+        focus = ctx.get("focus_frame")
+        if focus is None:
+            focus = event_peak_frame(events[0]) if events else len(gt) // 2
+        fkey = f"fi_frame_{dataset}_{mode}_{variant}_{clip}_{ev_idx}"
+        if fkey not in st.session_state or st.session_state[fkey] >= len(gt):
+            st.session_state[fkey] = int(min(focus, len(gt) - 1))
+        bcols = st.columns(1 + min(len(events), 3))
+        bcols[0].button("🎯 Jump to diagnostic frame", key=f"fi_jump_{fkey}", on_click=set_state, args=(fkey, int(min(focus, len(gt) - 1))), width="stretch")
+        for j, ev in enumerate(events[:3]):
+            bcols[1 + j].button(f"▶ E{ev.index} start", key=f"fi_ev_{fkey}_{ev.index}", on_click=set_state, args=(fkey, ev.start_frame), width="stretch")
+        frame_idx = st.slider("Frame", 0, max(0, len(gt) - 1), key=fkey)
+        ov = overlay_controls("fi")
+        case_frame_panel(dataset, clip, frame_idx, mode, ctx, events, ov)
+
+    # ---------------- Timeline chart
+    st.markdown("#### 📈 Timeline: GT events (red), anomaly scores, active persons / scorable windows, C1 cache & queue wait")
+    tcol1, tcol2 = st.columns([3, 1.4])
+    all_ids = [s.id for s in diag.SERIES_DEFS]
+    default_ids = list(diag.DEFAULT_TIMELINE_SERIES)
+    if mode == "scheduling" and variant in ("motion_only", "joint"):
+        default_ids = ["ml0_s0", "fixed", "motion_only" if variant == "motion_only" else "joint", "cache_c1_guard"]
+    if mode == "scheduling" and variant in ("queue_pi5", "queue_sim"):
+        default_ids = ["ml0_s0", "full_rate", "cache_c1_guard", "pi5_fixed_k1", "pi5_guard"]
+    if mode == "scorer_limited":
+        default_ids = ["ml0_s0", "full_rate", "cache_c1_guard"]
+    if mode == "fragmentation":
+        default_ids = ["ml0_s4", "full_rate", "cache_c1_guard"]
+    chosen_ids = tcol1.multiselect("Score series", all_ids, default=[i for i in default_ids if i in all_ids], key=f"fi_series_{mode}_{variant}",
+                                   format_func=lambda i: diag.SERIES_BY_ID[i].label)
+    y_mode = tcol2.radio("Y axis", list(diag.Y_MODES), format_func=diag.Y_MODES.get, key="fi_ymode")
+    tf, missing, notes = diag.build_timeline_frame(dataset, clip, chosen_ids, cell, y_mode)
+    chart = diag.make_timeline_chart(
+        tf, events, cursor_frame=frame_idx, n_frames=len(gt), threshold=1.0 if y_mode == "ratio" else None,
+        y_title={"raw": "anomaly score", "ratio": "score / θ", "minmax": "min-max score"}[y_mode], height=320,
+    )
+    if chart is not None:
+        st.altair_chart(chart, width="stretch")
+    if missing:
+        st.caption("Not available for this clip/dataset: " + "; ".join(f"`{m}`" for m in missing) + " (Pi 5 live covers only 12 ShanghaiTech clips × 240 frames).")
+    with st.expander("Series provenance"):
+        for label, note in notes.items():
+            st.markdown(f"- **{label}** — {note}")
+        st.markdown("- Alert rule: score > θ for ≥ 6 consecutive frames; θ = E05 causal threshold at fixed false-alert rate (S0 offline ratios are approximate).")
+
+    wf = get_active_window_frame(dataset, clip)
+    ov_df, ov_notes = diag.build_overlay_frame(dataset, clip, cell)
+    pcol1, pcol2 = st.columns(2)
+    with pcol1:
+        st.markdown("**Active persons & scorable STG-NF windows per frame**")
+        if wf is not None:
+            wc = diag.make_timeline_chart(wf, events, cursor_frame=frame_idx, y_title="count", height=240, step=True, n_frames=len(gt))
+            st.altair_chart(wc, width="stretch")
+            st.caption("Tracker replay on the cached ML0 detections: *default* = BoT-SORT gate 0.25 single stage; *2-stage* = locked c=0.20 + low 0.05. "
+                       "A window 'lands' on the frame where a complete 24-frame (UB: 16) same-identity pose window ends.")
+        else:
+            st.info("No ML0 detector cache for this clip.")
+    with pcol2:
+        st.markdown("**C1 cache hits, detector observation & queue wait**")
+        if ov_df.empty:
+            st.info("No scheduler traces for this clip/cell.")
+        else:
+            qdf = ov_df[ov_df["panel"] == "queue wait (s)"]
+            odf = ov_df[ov_df["panel"] != "queue wait (s)"]
+            if not qdf.empty:
+                st.altair_chart(diag.make_timeline_chart(qdf, events, cursor_frame=frame_idx, y_title="queue wait (s)", height=170, n_frames=len(gt)), width="stretch")
+            if not odf.empty:
+                st.altair_chart(diag.make_timeline_chart(odf, events, cursor_frame=frame_idx, y_title="1 = observed / reused / shed", height=170, step=True, n_frames=len(gt)), width="stretch")
+            for n in ov_notes:
+                st.caption(n)
+        st.caption(f"Budget cell for simulated arms: `{cell}`; K=1 arms use `{diag.K1_CELL}`.")
+
+
 # ---------------------------------------------------------------- Main UI
 
 def main():
@@ -429,11 +951,18 @@ def main():
         device = st.selectbox("Live Inference Device", ["cpu", "mps"], index=0)
 
     # ---------------- Main Tabs ----------------
-    tab_obs, tab_bench, tab_live = st.tabs([
+    tab_labels = [
         "🎬 Video & Live Detection Observer",
         "📊 Cross-Experiment Benchmark & Verdicts",
         "⚡ Full-Clip Offline/Filling Evaluator",
-    ])
+        "🗂️ Dataset Explorer",
+        "🩺 Failure Case Inspector",
+    ]
+    try:  # lazy tabs (Streamlit >= 1.5x): the two heavy new tabs only execute while they are selected
+        tabs = st.tabs(tab_labels, key="main_tabs", on_change="rerun")
+    except TypeError:
+        tabs = st.tabs(tab_labels)
+    tab_obs, tab_bench, tab_live, tab_explorer, tab_inspector = tabs
 
     # ================================================================
     # TAB 1: Video & Live Detection Observer
@@ -936,6 +1465,21 @@ def main():
                         plt.close(fig_live)
                     except ValueError as err:
                         st.warning(f"STG-NF could not score any continuous window on this clip: {err}")
+
+
+    # ================================================================
+    # TAB 4: Dataset Explorer (ShanghaiTech & UBnormal)
+    # ================================================================
+    with tab_explorer:
+        if tab_is_open(tab_explorer):
+            render_dataset_explorer()
+
+    # ================================================================
+    # TAB 5: Failure Case Inspector (Q2-P1 E00-E07 + physical Pi 5)
+    # ================================================================
+    with tab_inspector:
+        if tab_is_open(tab_inspector):
+            render_failure_inspector()
 
 
 if __name__ == "__main__":
