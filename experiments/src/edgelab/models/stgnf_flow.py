@@ -14,6 +14,10 @@ Optional extras (both off by default, so the default model is the plain STG-NF f
                   the subnet sees it, the flow does not model it (the density is still over x, y only).
     mask_missing  GAU only: attention keys of predicted frames (provenance 0) are masked out (EXP-018 GAU-FA).
 
+    CausalGraphSubnet  (Q2-P1-E06, LoRaD) the graph block with a CAUSAL temporal convolution: left-only zero padding of k - 1 frames
+                 (F.pad(x, (0, 0, k - 1, 0)), padding=0 inside the conv), so the output at frame t depends only on frames <= t.
+                 `causal-lite` swaps the dense (k, 1) temporal conv for a depthwise one (groups = channels).
+
 Shapes: x (N, 2, T, V) -> z (N, 2, T, V), nll (N,). Tensors only, no hidden state besides ActNorm's first-batch init.
 """
 
@@ -22,13 +26,14 @@ import math
 import numpy as np
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 
 from edgelab.pose.stgnf_eval import _import_stgnf
 
 _import_stgnf()
 from models.STG_NF.graph import Graph  # noqa: E402  (third_party/STG-NF, put on sys.path above)
 from models.STG_NF.modules_pose import ActNorm2d, Permute2d, gaussian_likelihood  # noqa: E402
-from models.STG_NF.stgcn import st_gcn  # noqa: E402
+from models.STG_NF.stgcn import ConvTemporalGraphical, st_gcn  # noqa: E402
 
 NUM_JOINTS = 18
 
@@ -45,6 +50,49 @@ class GraphSubnet(nn.Module):
         super().__init__()
         self.register_buffer("A", make_adjacency())
         self.gcn = st_gcn(in_channels, 2, (n_frames // 2 + 1, self.A.size(0)), 1, residual=not first)
+
+    def forward(self, x: torch.Tensor, valid: torch.Tensor | None = None) -> torch.Tensor:
+        out, _ = self.gcn(x, self.A)
+        return out
+
+
+class CausalSTGCN(nn.Module):
+    """`st_gcn` with a causal temporal convolution (LoRaD): graph conv (1-frame kernel, no temporal footprint) -> BN -> ReLU ->
+    temporal conv over the k frames ending at t (left zero padding k - 1, no right padding) -> BN, plus the residual path.
+
+    Same parameter count as the original block with `lite=False`; `lite=True` makes the temporal conv depthwise (groups = channels).
+    """
+
+    def __init__(self, in_channels: int, out_channels: int, kernel_size: tuple[int, int], residual: bool = True, lite: bool = False):
+        super().__init__()
+        assert len(kernel_size) == 2 and kernel_size[0] >= 1
+        self.k = int(kernel_size[0])
+        self.gcn = ConvTemporalGraphical(in_channels, out_channels, kernel_size[1])
+        self.bn1, self.relu1 = nn.BatchNorm2d(out_channels), nn.ReLU(inplace=False)
+        self.tconv = nn.Conv2d(out_channels, out_channels, (self.k, 1), padding=0, groups=out_channels if lite else 1)
+        self.bn2 = nn.BatchNorm2d(out_channels)
+        if not residual:
+            self.residual = lambda x: 0
+        elif in_channels == out_channels:
+            self.residual = lambda x: x
+        else:
+            self.residual = nn.Sequential(nn.Conv2d(in_channels, out_channels, kernel_size=1), nn.BatchNorm2d(out_channels))
+
+    def forward(self, x: torch.Tensor, A: torch.Tensor):
+        res = self.residual(x)
+        h, _ = self.gcn(x, A)
+        h = self.relu1(self.bn1(h))
+        h = self.tconv(F.pad(h, (0, 0, self.k - 1, 0)))  # pad the time axis on the left only: no future frame is ever read
+        return F.relu(self.bn2(h) + res), A
+
+
+class CausalGraphSubnet(nn.Module):
+    """Causal coupling network (LoRaD): input (N, Cin, T, V) -> (N, 2, T, V); frame t of the output sees only frames <= t of the input."""
+
+    def __init__(self, in_channels: int, n_frames: int, first: bool, lite: bool = False, kernel: int | None = None):
+        super().__init__()
+        self.register_buffer("A", make_adjacency())
+        self.gcn = CausalSTGCN(in_channels, 2, (kernel or n_frames // 2 + 1, self.A.size(0)), residual=not first, lite=lite)
 
     def forward(self, x: torch.Tensor, valid: torch.Tensor | None = None) -> torch.Tensor:
         out, _ = self.gcn(x, self.A)
@@ -134,6 +182,19 @@ class CouplingStep(nn.Module):
         z2 = (z2 + shift) * scale
         return torch.cat([z1, z2], dim=1), logdet + torch.log(scale).sum(dim=[1, 2, 3])
 
+    def frame_forward(self, x, condition=None, valid=None):
+        """Same transform as forward, but the log-determinant is returned per frame (N, T)."""
+        z = self.actnorm_frame(x)
+        z = self.permute(z, reverse=False)
+        z1, z2 = z[:, 0:1], z[:, 1:2]
+        shift, scale = self._shift_scale(z1, condition, valid)
+        z2 = (z2 + shift) * scale
+        logdet = torch.log(scale).sum(dim=(1, 3)) + self.actnorm.logs.sum() * x.shape[3]
+        return torch.cat([z1, z2], dim=1), logdet
+
+    def actnorm_frame(self, x):
+        return (x + self.actnorm.bias) * torch.exp(self.actnorm.logs)
+
     def reverse(self, z, condition=None, valid=None):
         z1, z2 = z[:, 0:1], z[:, 1:2]
         shift, scale = self._shift_scale(z1, condition, valid)
@@ -149,15 +210,19 @@ class CouplingFlow(nn.Module):
     def __init__(self, subnet: str = "graph", n_frames: int = 24, steps: int = 8, prior_mean: float = 3.0,
                  provenance: bool = False, mask_missing: bool = False, gau: dict | None = None):
         super().__init__()
-        if subnet not in ("graph", "gau"):
-            raise ValueError(f"subnet must be 'graph' or 'gau', got {subnet!r}")
+        if subnet not in ("graph", "gau", "causal", "causal-lite"):
+            raise ValueError(f"subnet must be 'graph', 'gau', 'causal' or 'causal-lite', got {subnet!r}")
         self.n_frames, self.prior_mean, self.provenance = n_frames, prior_mean, provenance
         in_channels = 1 + int(provenance)
         gau = {**(gau or {}), "mask_missing": mask_missing}
-        self.steps = nn.ModuleList(
-            CouplingStep(GraphSubnet(in_channels, n_frames, first=(k == 0)) if subnet == "graph"
-                         else GauSubnet(in_channels, n_frames, first=(k == 0), gau=gau))
-            for k in range(steps))
+        def make(k: int) -> nn.Module:
+            if subnet == "graph":
+                return GraphSubnet(in_channels, n_frames, first=(k == 0))
+            if subnet in ("causal", "causal-lite"):
+                return CausalGraphSubnet(in_channels, n_frames, first=(k == 0), lite=subnet == "causal-lite")
+            return GauSubnet(in_channels, n_frames, first=(k == 0), gau=gau)
+
+        self.steps = nn.ModuleList(CouplingStep(make(k)) for k in range(steps))
 
     def _condition(self, provenance: torch.Tensor | None, x: torch.Tensor):
         """(N, T) provenance -> (N, 1, T, V) condition (same value for every joint); None when the model has no condition."""
@@ -191,13 +256,33 @@ class CouplingFlow(nn.Module):
         return z, -log_p / (math.log(2.0) * z[0].numel())
 
 
+def frame_nll(flow: "CouplingFlow", x: torch.Tensor) -> torch.Tensor:
+    """(N, 2, T, V) -> (N, T): every frame's share of the window NLL (bits per dimension), so that nll = frame_nll.mean(1).
+
+    Exact for any flow (it is only a regrouping of the sums), but only a *per-frame causal* quantity when the subnets are causal."""
+    n, c, t, v = x.shape
+    logdet = torch.zeros(n, t, dtype=x.dtype, device=x.device)
+    h = x
+    for step in flow.steps:  # the steps again, keeping the per-frame log-determinants
+        h, d = step.frame_forward(h)
+        logdet = logdet + d
+    log_p = gaussian_likelihood_frames(torch.full_like(h, flow.prior_mean), h)
+    return -(log_p + logdet) / (math.log(2.0) * c * v)
+
+
+def gaussian_likelihood_frames(mean: torch.Tensor, x: torch.Tensor) -> torch.Tensor:
+    """Per-frame log N(x; mean, 1): (N, C, T, V) -> (N, T) (same constants as modules_pose.gaussian_p with logs = 0)."""
+    return (-0.5 * (((x - mean) ** 2) / (1.0 + 1e-6) + math.log(2 * math.pi))).sum(dim=(1, 3))
+
+
 def count_parameters(model: nn.Module) -> int:
     return sum(p.numel() for p in model.parameters())
 
 
 def build_flow(kind: str, n_frames: int = 24) -> CouplingFlow:
-    """kind: 'graph' | 'gau' | 'graph-fa' | 'gau-fa' | 'gau-fa-mask' (fa = with the provenance condition)."""
-    options = {"graph": dict(subnet="graph"), "gau": dict(subnet="gau"),
+    """kind: 'graph' | 'gau' | 'causal' | 'causal-lite' | 'graph-fa' | 'gau-fa' | 'gau-fa-mask' (fa = with the provenance condition)."""
+    options = {"graph": dict(subnet="graph"), "gau": dict(subnet="gau"), "causal": dict(subnet="causal"),
+               "causal-lite": dict(subnet="causal-lite"),
                "graph-fa": dict(subnet="graph", provenance=True), "gau-fa": dict(subnet="gau", provenance=True),
                "gau-fa-mask": dict(subnet="gau", provenance=True, mask_missing=True)}
     return CouplingFlow(n_frames=n_frames, **options[kind])

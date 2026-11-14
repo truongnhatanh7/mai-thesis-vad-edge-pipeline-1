@@ -1,0 +1,33 @@
+experiment: Q2-P1-E07
+mlflow: {uri: "http://127.0.0.1:5000", experiment: Q2-P1-E07}
+work_dir: ~/thesis-data/q2-p1-e07
+datasets:
+  ShanghaiTech: {clips: 107, dev: 35, confirmation: 72, traj_seg_len: 16, lorad_seg_len: 24}
+  UBnormal: {clips: 211, dev: 70, confirmation: 141, traj_seg_len: 12, lorad_seg_len: 16}
+frontends:
+  ShanghaiTech: [yolo26_e2e, yolo26_o2m, stock_yolov8n_640, ml0_ncnn]
+  UBnormal: [yolo26_e2e, stock_yolov8n_640, ml0_mps]
+caches:
+  yolo26_e2e: ~/thesis-data/exp017-sht/cache/L0_E0   # UB: ~/thesis-data/exp017-ub/cache/L0_E0
+  yolo26_o2m: ~/thesis-data/exp017-sht/cache/L0_E0-o2m
+trackers:
+  tracktrack_sweep: {track_high: [0.20, 0.25, 0.35], track_low: [0.05, 0.10], match_thresh: [0.70, 0.80], new_offset: 0.0, min_track_len: 3, buffer: 30, gmc: none, reid: false}
+  tracktrack_tune_split: test_dev
+  controls: [botsort_default, botsort_2stage_locked]
+scorers: [stgnf_frozen, lorad_causal_flow, trajvad_t, trajvad_p]
+trajvad:
+  train: {epochs: 10, optimizer: RMSprop, lr: 5.0e-4, momentum: 0.9, batch: 256, grad_clip: 3.0, seeds: [0, 1, 2], device: mps, stride: 4}
+  T: {hidden: 96, K: 6, weight_decay: 0}
+  P: {hidden: 64, K: 18, K_pose: 18, pose_dim: 51, weight_decay: 1.0e-5}
+protocols: [S0, S4]
+bootstrap: {resamples: 2000, paired: true, seed: 20260514}
+cache_guard: {policy: Cache-C1+Guard, guard_on_ms: 400, guard_off_ms: 150}
+pi5:
+  host: nanh@raspberrypi.local
+  model_src: ~/thesis-data/vm-exchange/models/yolo26n-pose-640-384x640-ncnn
+  model_dst: ~/thesis-data/models/
+  idle_check: "ps aux | grep python"   # wait until q2_p1_pi5_suite finished
+  arms: [yolo26_lorad, yolo26_trajvadp, ml0_lorad, ml0_trajvadp]
+  variants: [cache_off, cache_c1_guard]
+  metrics: [pmic_watts, temp_c, rss_mb, decode_ms, pose_ms, tracktrack_ms, scorer_ms, fps, delivered_auc]
+registry: [edgelab-yolo26n-pose, edgelab-lorad-causal-flow, edgelab-trajvad-p]

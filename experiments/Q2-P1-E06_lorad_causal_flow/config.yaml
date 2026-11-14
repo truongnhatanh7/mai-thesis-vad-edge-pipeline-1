@@ -1,0 +1,43 @@
+# Q2-P1-E06 configuration (written with plan.md before any E06 number; see plan.md section 2-4)
+experiment: Q2-P1-E06_lorad_causal_flow
+paper: "Zhang et al., Lorad: lightweight causal pose flow for online real-time video anomaly detection, JRTIP 23(4), 2026, doi:10.1007/s11554-026-01937-6"
+paper_reported: {ShanghaiTech: 84.8, UBnormal: 71.2}
+training: true
+seed_list: [0, 1, 2]
+train:
+  epochs: 10
+  batch_size: 256
+  optimizer: Adamax
+  lr: 5.0e-4
+  lr_decay_per_epoch: 0.99
+  grad_clip: 100
+  augmentation: [identity, mirror]
+  window_stride: 6
+  prior: {mean: 3.0, std: 1.0}
+  steps_K: 8
+  temporal_kernel: {ShanghaiTech: 13, UBnormal: 9}   # L//2 + 1
+  threads_per_job: 2
+  parallel_jobs: 4
+  data:
+    ShanghaiTech: experiments/third_party/STG-NF/data/ShanghaiTech/pose/train   # 330 clips, released AlphaPose
+    UBnormal: experiments/third_party/STG-NF/data/UBnormal/pose/train           # 186 clips
+seg_len: {ShanghaiTech: 24, UBnormal: 16}
+normalisation:
+  N0: per-window mean / std_y (STG-NF)
+  N1: {kind: causal EMA, alpha: "2/(L+1)", init: first pose of the track, statistics: [centroid_xy, mean_y, mean_y2]}
+arms:
+  A0_STGNF_Frozen: {flow: graph, norm: N0, weights: released}
+  A1_STGNF_Retrained: {flow: graph, norm: N0, seeds: [0, 1, 2]}
+  A2_LoRaD_CausalConv_WinNorm: {flow: causal, norm: N0, seeds: [0, 1, 2]}
+  A3_LoRaD_CausalConv_PrefixNorm: {flow: causal, norm: N1, seeds: [0, 1, 2], eval_modes: [window, stream]}
+  A2L_Lite: {flow: causal-lite, norm: N0, seeds: [0]}
+pose_sources:
+  released: {ShanghaiTech: experiments/third_party/STG-NF/data/ShanghaiTech/pose/test, UBnormal: experiments/third_party/STG-NF/data/UBnormal/pose/test}
+  ML0_edge: {ShanghaiTech: "~/thesis-data/exp020-ncnn/cache/L0_E0-ML0 (ML0_ncnn)", UBnormal: "~/thesis-data/exp020-ML0-ub/cache/L0_E0 (ML0_mps proxy)"}
+  YOLO26_e2e: {ShanghaiTech: "~/thesis-data/exp017-sht/cache/L0_E0", UBnormal: "~/thesis-data/exp017-ub/cache/L0_E0"}
+tracker: {name: BoT-SORT two-stage (E01 locked), c: 0.20, low: 0.05, buffer: 30, match: 0.85, gmc: none, reid: false}
+protocols: {S0: offline paper, S4: strict causal completion landing, causal half-Gaussian, train sentinel, hold 0}
+sentinel_quantile: {ShanghaiTech: max, UBnormal: p50}
+splits: {ShanghaiTech: {dev: 35, confirmation: 72}, UBnormal: {dev: 70, confirmation: 141}, source: Q2-P1-E00_audit/config.yaml}
+bootstrap: {unit: video, resamples: 2000, seed: 0}
+mlflow: {tracking_uri: "http://127.0.0.1:5000", experiment: Q2-P1-E06}
