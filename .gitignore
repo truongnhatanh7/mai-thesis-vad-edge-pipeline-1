@@ -19,7 +19,9 @@ experiments/third_party/
 
 # MLflow local database & heavy run artifacts (mlflow_runs.csv is tracked)
 experiments/mlruns/
+experiments/mlartifacts/
 experiments/mlflow.db
+experiments/Archive.zip
 
 # Binary model weights and heavy arrays (LFS quota exceeded on free GitHub account; hashes & summaries are tracked)
 *.pt
