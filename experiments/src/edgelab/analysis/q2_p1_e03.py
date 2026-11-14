@@ -927,8 +927,11 @@ class Scheduler(Policy):
         return {"starts": self.n_start, "forced_checks": self.n_forced}
 
 
-def simulate(w: World, c: CostArrays, pol: Policy, clips: list[int], light: bool = False, trace: dict | None = None) -> dict:
+def simulate(w: World, c: CostArrays, pol: Policy, clips: list[int], light: bool = False, trace: dict | None = None, init_free: float = 0.0) -> dict:
     """Replay `pol` on the continuous stream formed by `clips` (queue carried over between clips, never reset).
+
+    E05 additions (defaults reproduce E03 / E04 exactly): `init_free` = backlog (ms after the stream's first arrival) the worker starts with, to chain
+    long streams segment by segment; `w.K["c1_retrack"]` = the tracker still runs (and is charged) on C1-reused frames (non-oracle identity).
 
     Returns per-frame service/cpu/wait/finish lists, one record per scored job (clip position, completion frame, stream index, delivered
     min-normality) and cache / schedule statistics. `trace` = {clip position: [], ...} receives per-frame decision tuples."""
@@ -947,7 +950,8 @@ def simulate(w: World, c: CostArrays, pol: Policy, clips: list[int], light: bool
     S = dict(runs=0, run_frames=0, detect_frames=0, reuse_frames=0, forced_frames=0, c1_check_ms=0.0, c2_check_ms=0.0, saved_pose_ms=0.0,
              saved_score_ms=0.0, win_fresh=0, win_reuse=0, win_cand=0, c2_err_sum=0.0, c2_err_max=0.0, c2_age_sum=0, c2_age_max=0, c1_age_sum=0, shed_frames=0,
              decode_ms=0.0, pose_ms=0.0, track_ms=0.0, score_ms=0.0, obs_ms=0.0, window_frames=0, scored_frames=0, mv_export_ms=0.0, retrieve_saved_ms=0.0)
-    free, gs = 0.0, 0
+    free, gs = float(init_free), 0
+    retrack = bool(w.K.get("c1_retrack"))
     for pos, ci in enumerate(clips):
         n, g0, sb = int(w.n_frames[ci]), int(w.offsets[ci]), int(w.start_base[ci])
         pol.start_clip(n)
@@ -1021,8 +1025,16 @@ def simulate(w: World, c: CostArrays, pol: Policy, clips: list[int], light: bool
                         S["decode_ms"] += rc[g]
                 if rr:
                     S["reuse_frames"] += 1
-                    saved += pc[g] + tc[g]
-                    S["saved_pose_ms"] += pc[g] + tc[g]
+                    if retrack:  # non-oracle C1: only the pose network is skipped, the tracker consumes the reused detections
+                        wall += tw[g]
+                        cpu += tc[g]
+                        disc += tc[g]
+                        S["track_ms"] += tc[g]
+                        saved += pc[g]
+                        S["saved_pose_ms"] += pc[g]
+                    else:
+                        saved += pc[g] + tc[g]
+                        S["saved_pose_ms"] += pc[g] + tc[g]
                     age = 1
                     while (ch[2] >> (t - ch[0] - age)) & 1:
                         age += 1

@@ -1,0 +1,422 @@
+experiment: Q2-P1-E05
+title: Confirmation
+seed: 20261113
+pool_seed: 7
+plan_sha256: 3d5b4c47eba12368c6dd201867dff11939101cd94823c7779280b1f3ca90ebec
+bootstrap:
+  resamples: 2000
+  seed: 0
+builds_on:
+  E00:
+    summary_sha256: d8724447773310ae1fdb36e985968563b9bb125141cb4b8fc7b7dd511d40d5c0
+    config_sha256: ea51369601050b93033871e794888420492bf974920c2a83f3b1257cd09c1f6c
+  E01:
+    summary_sha256: 38af324934cd02687201bb6dec6b193cd7e02a1a650e1cd77e65d2361c10dfa1
+    config_sha256: 7cc89f3f4072dc5074c4b91fad9d5a693d16d0965ec4f19be705eb18a1c92514
+  E02:
+    summary_sha256: 1fb812656d3747857d0a9ca7d37da9280d5ae03b401c6c4b153b6651aff5958b
+    config_sha256: 9435d400623c30187ebdcbf0a36efda87f356d9c928197c46bc16dc5b2678c2e
+  E03:
+    summary_sha256: fe6e612e2a5932d01b01895b282632b3af27816ca3cc53cf852c01a0cba5f1ab
+    config_sha256: f90a8c4f050da46184ea61f2972971023a9437a9d33130f51522b37cad34e689
+  E04:
+    summary_sha256: b21c98a5aaa62a4bfdb9b15ec1e948c881ce6bebe3a846e936e4ba648a90edc6
+    config_sha256: e0ec18c8037a959efb93a3e2c948050d6ce74fc47cb17fb8830de22db90a21b9
+locked_system:
+  frontend:
+    ShanghaiTech: ML0_ncnn
+    UBnormal: ML0_mps
+  frontend_control:
+    ShanghaiTech: stock NCNN FP16 @640 (E04 cache)
+    UBnormal: stock MPS @640
+  tracker: c0.20|low-0.05|b30|m0.85
+  tracker_control: c0.25|low-off|b30|m0.80
+  scorer: frozen STG-NF (E00 strict causal S3/S4, completion landing)
+  primary: Cache-C1
+  overload_safe: Cache-C1+Guard
+  adopted_from_E04:
+    MV: false
+    INT8: false
+  guard:
+    shed_on_ms: 400.0
+    shed_off_ms: 150.0
+    thinning_ported: false
+  c1:
+    level: 3
+    A1: 4
+cells:
+- - 2.0
+  - 0.25
+- - 2.0
+  - 0.33
+- - 2.0
+  - 0.5
+- - 2.0
+  - 0.67
+- - 2.0
+  - 0.75
+- - 2.0
+  - 1.0
+- - 2.5
+  - 0.5
+- - 2.5
+  - 0.75
+- - 2.5
+  - 1.0
+- - 3.0
+  - 0.5
+- - 3.0
+  - 0.75
+- - 3.0
+  - 1.0
+- - 1.0
+  - 0.25
+- - 1.0
+  - 0.5
+- - 1.0
+  - 1.0
+cells_primary12:
+- - 2.0
+  - 0.25
+- - 2.0
+  - 0.33
+- - 2.0
+  - 0.5
+- - 2.0
+  - 0.67
+- - 2.0
+  - 0.75
+- - 2.0
+  - 1.0
+- - 2.5
+  - 0.5
+- - 2.5
+  - 0.75
+- - 2.5
+  - 1.0
+- - 3.0
+  - 0.5
+- - 3.0
+  - 0.75
+- - 3.0
+  - 1.0
+cells_native:
+- - 1.0
+  - 0.25
+- - 1.0
+  - 0.5
+- - 1.0
+  - 1.0
+cell_groups:
+  budget:
+  - - 2.0
+    - 0.33
+  - - 2.0
+    - 0.5
+  - - 2.0
+    - 0.75
+  overload:
+  - - 3.0
+    - 1.0
+  native:
+  - - 1.0
+    - 1.0
+arms:
+  Stock-Default-K1:
+    world: stock_default
+    lvl: 0
+    guard: false
+    k1: true
+    ref: own
+  ML0-Default-K1:
+    world: ml0_default
+    lvl: 0
+    guard: false
+    k1: true
+    ref: own
+  Full-Rate:
+    world: ml0_locked
+    lvl: 0
+    guard: false
+    k1: true
+    ref: own
+  Stock-Baseline:
+    world: stock_default
+    lvl: 0
+    guard: false
+    k1: false
+    ref: own
+  ML0-Default-Fixed:
+    world: ml0_default
+    lvl: 0
+    guard: false
+    k1: false
+    ref: own
+  Fixed:
+    world: ml0_locked
+    lvl: 0
+    guard: false
+    k1: false
+    ref: own
+  Fixed+Guard:
+    world: ml0_locked
+    lvl: 0
+    guard: true
+    k1: false
+    ref: fixed
+  Cache-C1:
+    world: ml0_locked
+    lvl: 3
+    guard: false
+    k1: false
+    ref: fixed
+  Cache-C1+Guard:
+    world: ml0_locked
+    lvl: 3
+    guard: true
+    k1: false
+    ref: fixed
+  C1-ReTrack:
+    world: ml0_retrack
+    lvl: 3
+    guard: false
+    k1: false
+    ref: fixed
+  C1-ReTrack+Guard:
+    world: ml0_retrack
+    lvl: 3
+    guard: true
+    k1: false
+    ref: fixed
+e03_reference_arms:
+- Independent-Combo
+contrasts:
+  ladder.frontend:
+  - ML0-Default-K1
+  - Stock-Default-K1
+  ladder.tracker:
+  - Full-Rate
+  - ML0-Default-K1
+  ladder.budget:
+  - Fixed
+  - Full-Rate
+  ladder.cache:
+  - Cache-C1
+  - Fixed
+  ladder.guard:
+  - Cache-C1+Guard
+  - Cache-C1
+  e2e.cache_vs_stock:
+  - Cache-C1
+  - Stock-Baseline
+  e2e.guard_vs_stock:
+  - Cache-C1+Guard
+  - Stock-Baseline
+  e2e.fixed_vs_stock:
+  - Fixed
+  - Stock-Baseline
+  e2e.fixed_vs_default_fixed:
+  - Fixed
+  - ML0-Default-Fixed
+  cache.vs_fullrate:
+  - Cache-C1
+  - Full-Rate
+  guard.fixed:
+  - Fixed+Guard
+  - Fixed
+  retrack.vs_fixed:
+  - C1-ReTrack
+  - Fixed
+  retrack.vs_oracle:
+  - C1-ReTrack
+  - Cache-C1
+  retrack_guard.vs_fixed:
+  - C1-ReTrack+Guard
+  - Fixed
+  ref.guard_vs_independent:
+  - Cache-C1+Guard
+  - Independent-Combo
+  ref.cache_vs_independent:
+  - Cache-C1
+  - Independent-Combo
+constants:
+  ShanghaiTech:
+    nu_safe: -0.8800339698791504
+    nu_ref: -0.8033086061477661
+    sigma_ref: 0.10224171617987246
+    tau2:
+    - 0.032679966650903225
+    - 0.05104241147637367
+    - 0.0759828582406044
+    tau2_quantiles:
+    - 0.15
+    - 0.35
+    - 0.6
+    motion_q:
+      q50: 0.03185587376356125
+      q70: 0.04725123569369316
+      q85: 0.06827927380800247
+      q90: 0.08419186621904372
+    border_q:
+      q50: 0.005562827456742525
+      q90: 0.027814136818051338
+    qual_ref: 0.7520027756690979
+    n_normal_dev_windows: 100046
+    c1:
+      roi:
+      - 0.4222535192966461
+      - 1.0
+      - 1.8266667127609253
+      ext:
+      - 1.0
+      - 1.0
+      - 1.0
+      quantiles:
+      - 0.1
+      - 0.25
+      - 0.5
+    costs:
+      obs_ms: 0.366
+      c1_check_ms: 0.15
+      c2_check_ms: 0.01
+      measured:
+        observer_ms_median: 0.36091648507863283
+        thumb_ms_median: 0.10950001887977123
+        roi_check_ms_median: 0.03620819188654423
+        frames: 264
+    theta: 1.3774076319870052
+  UBnormal:
+    nu_safe: -0.9653168320655823
+    nu_ref: -0.8061348795890808
+    sigma_ref: 0.2127771381098222
+    tau2:
+    - 0.004923619888722896
+    - 0.015250881668180227
+    - 0.03757214769721031
+    tau2_quantiles:
+    - 0.15
+    - 0.35
+    - 0.6
+    motion_q:
+      q50: 0.008192402310669422
+      q70: 0.015937499701976776
+      q85: 0.032566629350185394
+      q90: 0.04409495368599892
+    border_q:
+      q50: 0.0004340277810115367
+      q90: 0.01100085470825434
+    qual_ref: 0.7387177348136902
+    n_normal_dev_windows: 144576
+    c1:
+      roi:
+      - 0.017341040074825287
+      - 0.12727272510528564
+      - 0.38461539149284363
+      ext:
+      - 0.0
+      - 0.0
+      - 0.0
+      quantiles:
+      - 0.1
+      - 0.25
+      - 0.5
+    costs:
+      obs_ms: 0.373291433788836
+      c1_check_ms: 0.26
+      c2_check_ms: 0.01
+      measured:
+        observer_ms_median: 0.373291433788836
+        thumb_ms_median: 0.2248544478788972
+        roi_check_ms_median: 0.034499913454055786
+        frames: 130
+    theta: 1.302967809571676
+subgroups:
+  short_event_s: 2.5
+  short_frames:
+    ShanghaiTech: 60
+    UBnormal: 75
+  entry_window_s: 1.0
+  crowd_min_tracks: 4
+  motion_threshold: E03 test_dev motion_q.q85 (p90 of the first second of the event)
+  loc_pad_s: 2.0
+  arms:
+  - Full-Rate
+  - Fixed
+  - Cache-C1
+  - Cache-C1+Guard
+  - C1-ReTrack
+  - Stock-Baseline
+  metrics:
+  - recall_0.5
+  - recall_1.0
+  - recall_2.0
+  - missed
+  - delay_p50_ms
+  - delay_p90_ms
+  - loc_auc
+  noninf_recall_pt: 5.0
+  noninf_delay_ms: 250.0
+sustained:
+  arms:
+  - Fixed-K1
+  - Cache-C1
+  - Cache-C1+Guard
+  - Fixed@b0.50
+  - Cache-C1+Guard@b0.50
+  s:
+  - 1.0
+  - 2.0
+  - 2.5
+  - 3.0
+  segment_minutes: 10.0
+  sht_loops: 5
+  ub_loops: 1
+  cap_ms: 2000.0
+  bounded_rule:
+    max_wait_ms: 2000.0
+    p99_ms: 2000.0
+    drift_ms: 100.0
+    queue_mem_mb: 200.0
+vm:
+  runs:
+  - mode: fixed_k1
+    s: 1.0
+  - mode: cache_c1_guard
+    s: 1.0
+  - mode: fixed_k1
+    s: 3.0
+  - mode: cache_c1_guard
+    s: 3.0
+  - mode: fixed_k1
+    s: 3.5
+  - mode: cache_c1_guard
+    s: 3.5
+  - mode: cache_c1
+    s: 3.5
+  passes: 4
+  frames: 11520
+  rss_marks:
+  - 0
+  - 2500
+  - 5000
+  - 10000
+  threads: 4
+  x264: libx264 veryfast crf 23 yuv420p g 48
+  host_load_limit_pct: 30
+verdict_rules:
+  V1: 'SHT confirmation Cache-C1 - Fixed, 12-cell mean: CI lower > 0 -> confirmed'
+  V2: UB replication of V1 (lower > 0 replicated; non-negative otherwise)
+  V3: 'Cache-C1 - Stock-Baseline, confirmation, 12-cell mean, both datasets: CI lower
+    > 0'
+  V4: ReTrack - Fixed lower > 0 and >= 50% of the oracle gain
+  V5: 'guard: non-overload cells non-inferior (lower > -0.25 pt); overload cells lower
+    > 0'
+  V6: 'short events, budget cells: recall@1s lower > -5 pt vs Fixed'
+  V7: 'new entries: recall@1s lower > -5 pt and delay p50 upper < +250 ms vs Fixed'
+  V8: 'C2 bounded: max wait, p99 <= 2000 ms, drift <= 100 ms, queue memory <= 200
+    MB'
+  V9: 'VM: >= 10,000 frames, RSS growth <= 5%, p99 Pi-equivalent wait <= 2000 ms'
+frozen_numbers_e03:
+  theta:
+    ShanghaiTech: 1.3774076319870052
+    UBnormal: 1.302967809571676
