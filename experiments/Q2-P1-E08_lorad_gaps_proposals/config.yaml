@@ -1,0 +1,82 @@
+# Q2-P1-E08 configuration (written with plan.md before any E08 model was trained; see plan.md)
+experiment: Q2-P1-E08_lorad_gaps_proposals
+source_plan: LORAD_GAPS_EXPERIMENT_PLAN.md
+date_locked: 2026-11-14
+seed_list: [0, 1, 2]
+baselines:
+  B0_STGNF: {source: E06 A1_STGNF_Retrained, flow: graph, norm: N0, mode: window, models: ~/thesis-data/q2-p1-e06/models/A1_<ds>_s<seed>}
+  B1_LoRaD: {source: E06 A2_LoRaD_CausalConv_WinNorm (selected_for_e07), flow: causal, norm: N0, mode: window, models: ~/thesis-data/q2-p1-e06/models/A2_<ds>_s<seed>}
+train:
+  epochs: 10
+  batch_size: 256
+  optimizer: Adamax
+  lr: 5.0e-4
+  lr_decay_per_epoch: 0.99
+  grad_clip: 100
+  augmentation: [identity, mirror]
+  window_stride: 6
+  prior: {mean: 3.0, std: 1.0}
+  steps_K: 8
+  jobs: {workers: 5, threads_per_worker: 1, device: cpu}   # independent trainings of this experiment in parallel; stages and experiments strictly sequential (plan.md A1)
+  data:
+    ShanghaiTech: experiments/third_party/STG-NF/data/ShanghaiTech/pose/train
+    UBnormal: experiments/third_party/STG-NF/data/UBnormal/pose/train
+seg_len: {ShanghaiTech: 24, UBnormal: 16}
+temporal_kernel: {ShanghaiTech: 13, UBnormal: 9}
+arms:
+  P_A_MS_CTFlow:      {multi_scale: true,  dilations: [1, 2, 4], fuse: "concat -> 1x1 proj + identity skip -> BN", context_nodes: false, loss: nll, smooth: false, trained: true}
+  P_B_RevMargin:      {multi_scale: false, context_nodes: false, loss: hybrid, smooth: false, trained: true}
+  P_C_IAC_Flow:       {multi_scale: false, context_nodes: true,  loss: nll, smooth: false, trained: true}
+  P_D_ConfSmooth:     {multi_scale: false, context_nodes: false, loss: nll, smooth: true, trained: false, weights: B1_LoRaD}
+  P_ABC_MS_IAC_RevFlow: {multi_scale: true, dilations: [1, 2, 4], context_nodes: true, loss: hybrid, smooth: true, trained: true}
+hybrid_loss:
+  lambda1_reverse: 1.0
+  lambda2_margin: 0.1
+  margin_bits_per_dim: 0.5
+  perturbations: {kinds: [frame_shuffle, velocity_scaling, joint_jitter], speed_slow: [0.2, 0.5], speed_fast: [1.8, 3.0], jitter_sigma: [0.05, 0.25]}
+  perturbed_pass_batchnorm: running statistics (not updated)
+context_nodes:
+  V: 20
+  hub: [neck, right_hip, left_hip]
+  graph: {strategy: uniform, max_hop: 8}
+  node_19: {features: [dcx_over_h, dcy_over_h], gain: 10.0, clip_box_heights_per_frame: 0.5, frame_gap_cap: 5, aspect_w_over_h: computed_not_fed}
+  node_20: {features: [prox_times_unit_direction], prox: "1/(1 + d_nn/h)", neighbour: nearest other pose in the same frame, solo: 0}
+  box: keypoint min/max over joints with conf >= 0.05, height floor 16 px
+smoothing: {conf_threshold: 0.25, weight: "min(1, c/0.25) on low-confidence joints", init: first pose, scope: whole track prefix}
+pose_sources:
+  released: {ShanghaiTech: experiments/third_party/STG-NF/data/ShanghaiTech/pose/test, UBnormal: experiments/third_party/STG-NF/data/UBnormal/pose/test}
+  ML0_edge: {detector: {ShanghaiTech: ML0_ncnn@640, UBnormal: "ML0_mps@640 (proxy)"}, tracker: {name: BoT-SORT two-stage (E01 locked), c: 0.20, low: 0.05, buffer: 30, match: 0.85, gmc: none, reid: false}, role: primary edge pipeline}
+  YOLO26_e2e: {detector: yolo26n-pose e2e (EXP-017 cache), tracker: {name: TrackTrack (E07 T1), c: 0.20, low: 0.05, buffer: 30, match: 0.80, min_track_len: 3, gmc: none, reid: false}}
+protocols: {S0: offline paper, S4: strict causal completion landing, causal half-Gaussian, train sentinel, hold 0}
+sentinel_quantile: {ShanghaiTech: max, UBnormal: p50}
+splits: {ShanghaiTech: {clips: 107, dev: 35, confirmation: 72, events: 194}, UBnormal: {clips: 211, dev: 70, confirmation: 141, events: 199}, source: Q2-P1-E00_audit/config.yaml}
+bootstrap: {unit: video, resamples: 2000, seed: 20261114, paired: true}
+strata:
+  short_event_max_s: 2.5
+  fast_motion_min_box_heights_per_frame: 0.06   # max over released tracks of the median per-pose speed during the event
+  high_crowd_min_tracks: 4                       # mean concurrent released tracks over the event frames
+operating_points:
+  FA_per_hour_at_event_recall: 0.5
+  recall_at_FA_budget: FA/h@R50 of B1 (same cell)
+rules:
+  verdict_split: confirmation
+  primary_pipeline: ML0_edge
+  protocol: S4
+  H_A: {pooled_auc_ci_lo_gt: 0, short_event_ci_lo_gt: 0, sustained_event_point_gt: 0}
+  H_B: {pooled_auc_ci_lo_gt: 0, fa_per_hour_ci_hi_lt: 0, params_equal: true, pi5_scorer_latency_within_pct: 5}
+  H_C: {fast_motion_ci_lo_gt: 0, high_crowd_ci_lo_gt: 0, recall_at_fa_b1_point_gt: 0, vs_trajvad_p_noninferiority_pt: -2.0, params_ratio_max: 0.00333, pi5_scorer_speedup_min: 4.0}
+  H_D: {fa_per_hour_ci_hi_lt: 0, pooled_auc_ci_lo_ge: -0.5}
+  H_Joint: {pi5: {detector: ML0_ncnn, tracker: BoT-SORT two-stage, scorer: P_ABC, cache: C1+Guard}, highest_delivered_auc_among_cache_arms: true, delivered_fps_ge: 24.0, queue_wait_p99_ms_lt: 500, throttled: "0x0"}
+pi5:
+  host: nanh@raspberrypi.local
+  idle_check: "ssh nanh@raspberrypi.local 'ps aux | grep python'"
+  threads: 4
+  frames: 2880            # 12 ShanghaiTech clips on disk
+  arrival_fps: 24
+  detector: ML0 YOLOv8n-pose NCNN FP16 384x640
+  tracker: BoT-SORT two-stage (E01 locked)
+  scorers: [B0, B1, P_A, P_B, P_C, P_ABC, TrajVAD-P]
+  variants: [full_rate, cache_c1_guard]
+  cache_guard: {c1: locked E03 SHT static-validity rule, guard_on_ms: 400, guard_off_ms: 150, shed: every other frame}
+  telemetry: [pmic_watts, joules_per_frame, temp_c, rss_mb, throttled]
+mlflow: {tracking_uri: "http://127.0.0.1:5000", experiment: Q2-P1-E08, registered_model: edgelab-ms-iac-revflow}
