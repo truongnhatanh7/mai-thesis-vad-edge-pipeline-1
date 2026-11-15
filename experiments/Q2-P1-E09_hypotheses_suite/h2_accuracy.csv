@@ -1,0 +1,17 @@
+dataset,pose,mode,tier1_sleep_pct,tier2_extrap_pct,total_saved_pct,auc_s0,auc_s4,delta_s4
+ShanghaiTech,released,Uncached Full-Rate (eps=0.0),0.0,0.0,0.0,85.2,80.16,0.0
+ShanghaiTech,released,MPC-LoRaD Conservative (eps=0.018),6.57,13.82,19.48,85.19,80.15,-0.01
+ShanghaiTech,released,MPC-LoRaD Balanced (eps=0.028),6.57,28.78,33.46,85.19,80.15,-0.01
+ShanghaiTech,released,MPC-LoRaD Aggressive (eps=0.042),6.57,40.01,43.95,85.16,80.13,-0.03
+ShanghaiTech,ML0_edge,Uncached Full-Rate (eps=0.0),0.0,0.0,0.0,80.86,76.29,0.0
+ShanghaiTech,ML0_edge,MPC-LoRaD Conservative (eps=0.018),7.22,10.42,16.89,80.86,76.3,0.01
+ShanghaiTech,ML0_edge,MPC-LoRaD Balanced (eps=0.028),7.22,22.64,28.23,80.84,76.27,-0.02
+ShanghaiTech,ML0_edge,MPC-LoRaD Aggressive (eps=0.042),7.22,36.74,41.31,80.84,76.26,-0.03
+UBnormal,released,Uncached Full-Rate (eps=0.0),0.0,0.0,0.0,70.68,71.31,0.0
+UBnormal,released,MPC-LoRaD Conservative (eps=0.018),3.78,43.95,46.07,70.67,71.3,-0.01
+UBnormal,released,MPC-LoRaD Balanced (eps=0.028),3.78,54.83,56.54,70.67,71.33,0.02
+UBnormal,released,MPC-LoRaD Aggressive (eps=0.042),3.78,61.27,62.74,70.68,71.32,0.01
+UBnormal,ML0_edge,Uncached Full-Rate (eps=0.0),0.0,0.0,0.0,58.37,60.92,0.0
+UBnormal,ML0_edge,MPC-LoRaD Conservative (eps=0.018),11.74,40.77,47.73,58.4,60.94,0.02
+UBnormal,ML0_edge,MPC-LoRaD Balanced (eps=0.028),11.74,49.9,55.78,58.44,60.89,-0.03
+UBnormal,ML0_edge,MPC-LoRaD Aggressive (eps=0.042),11.74,57.73,62.69,58.53,60.86,-0.06

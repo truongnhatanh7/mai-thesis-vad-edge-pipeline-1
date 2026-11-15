@@ -1,0 +1,13 @@
+dataset,pose,arm,params,buffer_kb,auc_s0,auc_s4,short_auc,sustained_auc
+ShanghaiTech,released,"STG-NF (Baseline, d=1 sym)",616,202.5,85.94,80.83,78.51,80.71
+ShanghaiTech,released,"LoRaD (Causal Base, d=1)",616,202.5,85.2,80.16,78.51,80.12
+ShanghaiTech,released,"MS-CTFlow-Bottleneck (Ours H1, d=1,2,4)",608,202.5,77.46,73.96,79.3,73.64
+ShanghaiTech,ML0_edge,"STG-NF (Baseline, d=1 sym)",616,202.5,81.71,76.7,74.48,76.46
+ShanghaiTech,ML0_edge,"LoRaD (Causal Base, d=1)",616,202.5,80.86,76.29,74.91,76.05
+ShanghaiTech,ML0_edge,"MS-CTFlow-Bottleneck (Ours H1, d=1,2,4)",608,202.5,75.89,72.59,81.76,72.12
+UBnormal,released,"STG-NF (Baseline, d=1 sym)",488,202.5,71.69,72.1,73.31,71.69
+UBnormal,released,"LoRaD (Causal Base, d=1)",488,202.5,70.68,71.31,67.11,70.77
+UBnormal,released,"MS-CTFlow-Bottleneck (Ours H1, d=1,2,4)",608,202.5,69.78,69.56,69.62,68.99
+UBnormal,ML0_edge,"STG-NF (Baseline, d=1 sym)",488,202.5,59.31,63.03,77.03,62.41
+UBnormal,ML0_edge,"LoRaD (Causal Base, d=1)",488,202.5,58.37,60.92,74.06,60.16
+UBnormal,ML0_edge,"MS-CTFlow-Bottleneck (Ours H1, d=1,2,4)",608,202.5,54.84,55.69,75.46,55.1

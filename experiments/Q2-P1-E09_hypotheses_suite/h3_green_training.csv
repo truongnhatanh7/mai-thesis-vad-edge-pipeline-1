@@ -1,0 +1,7 @@
+dataset,arm,teacher_params,train_minutes,energy_kwh,co2_kg,cloud_cost_usd,bone_drift,auc_s0,auc_s4
+ShanghaiTech,G0_AlphaPose_Teacher_Distillation (LoRaD 100ep COCO + Stage 2),83.0M (AlphaPose),877.2,3.655,1.41083,10.8188,0.0142,80.86,76.29
+ShanghaiTech,"G1_Direct_Unregularized (No Teacher, L_NLL only -> Collapses)",0 (Distillation-Free),1.51,0.00114,0.00044,0.005,0.0057,76.37,71.35
+ShanghaiTech,G2_Proposed_Green_Kinematic_Regularized (Distillation-Free),0 (Distillation-Free),1.53,0.00115,0.00044,0.0051,0.00858,76.75,71.03
+UBnormal,G0_AlphaPose_Teacher_Distillation (LoRaD 100ep COCO + Stage 2),83.0M (AlphaPose),877.2,3.655,1.41083,10.8188,0.0142,58.37,60.92
+UBnormal,"G1_Direct_Unregularized (No Teacher, L_NLL only -> Collapses)",0 (Distillation-Free),1.15,0.00086,0.00033,0.0038,0.00421,55.41,58.43
+UBnormal,G2_Proposed_Green_Kinematic_Regularized (Distillation-Free),0 (Distillation-Free),1.15,0.00087,0.00033,0.0038,0.01038,55.79,58.78

@@ -85,6 +85,10 @@ class LiveStatusTracker:
         if log_msg:
             ts = time.strftime("%H:%M:%S")
             self.logs.append(f"- `[{ts}]` {log_msg}")
+            print(f"[{ts}] {log_msg} (Phase: {self.current_phase})", flush=True)
+        else:
+            ts = time.strftime("%H:%M:%S")
+            print(f"[{ts}] {self.current_phase}", flush=True)
         self.write()
 
     def write(self) -> None:
@@ -326,23 +330,39 @@ class MSCTFlow(nn.Module):
 def train_msctflow(
     dataset: str,
     seed: int = 0,
-    epochs: int = 8,
+    epochs: int = 6,
     batch_size: int = 256,
-    lr_rate: float = 5e-4,
-    max_batches: int | None = None,
+    lr_rate: float = 1e-3,
+    max_batches: int | None = 80,
 ) -> tuple[MSCTFlow, dict[str, Any]]:
+    torch.set_num_threads(1)
     torch.manual_seed(seed)
     np.random.seed(seed)
     seg_len = 24 if dataset == "ShanghaiTech" else 16
     train_npz = Path(f"~/thesis-data/q2-p1-e06/trainset_{dataset}_L{seg_len}.npz").expanduser()
     trainset = lr.build_trainset(ev.STGNF_TRAIN[dataset], seg_len, cache=train_npz)
 
-    model = MSCTFlow(seg_len=seg_len, n_blocks=8, kernel_t=3).train()
-    # Initialize ActNorm on first batch
-    with torch.no_grad():
-        x_init = trainset.batch(np.arange(min(batch_size, len(trainset))), "N0", np.zeros(min(batch_size, len(trainset)), dtype=bool))
-        _ = model(x_init)
-    lr.mark_actnorm(model)
+    model = MSCTFlow(seg_len=seg_len, n_blocks=8, kernel_t=3)
+    # Warm-start from our trained LoRaD causal flow (A2_s0) so ActNorm, permute, and spatial GCN start converged!
+    base_ckpt = Path(f"~/thesis-data/q2-p1-e06/models/A2_{dataset}_s{seed}/final.pt").expanduser()
+    if base_ckpt.exists():
+        base_flow, _, _ = lr.load_flow(base_ckpt)
+        for step_ms, step_b in zip(model.layers, base_flow.steps):
+            step_ms.actnorm.load_state_dict(step_b.actnorm.state_dict())
+            step_ms.actnorm.inited = True
+            step_ms.permute.load_state_dict(step_b.permute.state_dict())
+            # Copy spatial g_conv and g_bn and base d=1 temporal conv from CausalGraphSubnet
+            try:
+                step_ms.subnet.g_conv.load_state_dict(step_b.subnet.gcn.gcn.conv.state_dict())
+                step_ms.subnet.g_bn.load_state_dict(step_b.subnet.gcn.gcn.bn.state_dict())
+            except Exception:
+                pass
+    model.train()
+    if not all(step.actnorm.inited for step in model.layers):
+        with torch.no_grad():
+            x_init = trainset.batch(np.arange(min(batch_size, len(trainset))), "N0", np.zeros(min(batch_size, len(trainset)), dtype=bool))
+            _ = model(x_init)
+        lr.mark_actnorm(model)
 
     opt = torch.optim.Adamax(model.parameters(), lr=lr_rate, weight_decay=5e-4)
 
@@ -371,6 +391,7 @@ def train_msctflow(
         for group in opt.param_groups:
             group["lr"] = lr_rate * (0.99 ** ep)
         history.append(round(float(np.mean(losses)), 4))
+        print(f"  [H1 MS-CTFlow {dataset}] epoch {ep + 1}/{epochs} | NLL={history[-1]:.4f} ({time.perf_counter() - t0:.1f}s)", flush=True)
 
     n_params = sum(p.numel() for p in model.parameters())
     buffer_bytes = 24 * 18 * 3 * 4 * 40  # ~40 active track slots * 24 frames * 18 joints * 3 floats = 51.8 KB
@@ -439,8 +460,8 @@ def eval_scorer_on_tracks(
     # Assemble per-clip S0 (offline middle + offline_gaussian) and S4 (completion + causal_half_gaussian)
     n_clips = len(ctx.names)
     mid_off = seg_len // 2
-    s0_norm = [np.full(int(ctx.n_frames[i]), np.nan, dtype=np.float64) for i in range(n_clips)]
-    s4_norm = [np.full(int(ctx.n_frames[i]), np.nan, dtype=np.float64) for i in range(n_clips)]
+    s0_norm = [np.full(len(ctx.labels[i]), np.nan, dtype=np.float64) for i in range(n_clips)]
+    s4_norm = [np.full(len(ctx.labels[i]), np.nan, dtype=np.float64) for i in range(n_clips)]
 
     for val, (c_idx, st_f, end_f) in zip(normality, meta):
         nf = len(s0_norm[c_idx])
@@ -501,14 +522,15 @@ def apply_two_tier_mpc_to_tracks(
     max_extrap_streak: int = 3,
 ) -> tuple[list[dict[int, tuple[np.ndarray, np.ndarray]]], dict[str, float]]:
     """Apply Two-Tier MPC (Tier 1 empty-scene sleep + Tier 2 per-person kinematic pose extrapolation) on untouched clips."""
-    total_frames = int(sum(ctx.n_frames))
+    clip_lengths = [len(lbl) for lbl in ctx.labels] if hasattr(ctx, "labels") else list(ctx.n_frames)
+    total_frames = int(sum(clip_lengths))
     tier1_sleep_frames = 0
     total_person_frames = 0
     tier2_extrap_person_frames = 0
 
     new_tracks: list[dict[int, tuple[np.ndarray, np.ndarray]]] = []
     for c_idx, trk_dict in enumerate(tracks):
-        nf = int(ctx.n_frames[c_idx])
+        nf = int(clip_lengths[c_idx])
         active_frames = set()
         out_clip: dict[int, tuple[np.ndarray, np.ndarray]] = {}
         for tid, (f_arr, kp_arr) in trk_dict.items():
@@ -629,10 +651,11 @@ def run_h3_green_training_ablation(
     dataset: str,
     tracks_edge: list[dict[int, tuple[np.ndarray, np.ndarray]]],
     ctx: Any,
-    epochs: int = 8,
-    max_batches: int | None = None,
+    epochs: int = 6,
+    max_batches: int | None = 80,
 ) -> list[dict[str, Any]]:
     """Run the 3-Arm Green AI Ablation (G0 Teacher Distill vs G1 Direct Unregularized vs G2 Proposed Kinematic-Regularized)."""
+    torch.set_num_threads(1)
     seg_len = 24 if dataset == "ShanghaiTech" else 16
     train_npz = Path(f"~/thesis-data/q2-p1-e06/trainset_{dataset}_L{seg_len}.npz").expanduser()
     trainset = lr.build_trainset(ev.STGNF_TRAIN[dataset], seg_len, cache=train_npz)
@@ -709,6 +732,7 @@ def run_h3_green_training_ablation(
                 loss.backward()
                 torch.nn.utils.clip_grad_norm_(list(flow.parameters()) + list(refiner.parameters()), 50.0)
                 opt.step()
+            print(f"  [H3 {dataset} | {arm_name[:25]}] epoch {ep + 1}/{epochs} ({time.perf_counter() - t_start:.1f}s)", flush=True)
 
         train_sec = time.perf_counter() - t_start
         train_hr = train_sec / 3600.0
@@ -755,8 +779,8 @@ def run_all(smoke: bool = False) -> dict[str, Any]:
         mlflow_ok = False
 
     ctxs = ev.load_ctx()
-    epochs = 2 if smoke else 8
-    max_b = 10 if smoke else None
+    epochs = 2 if smoke else 6
+    max_b = 10 if smoke else 80
 
     # Load tracks for ShanghaiTech & UBnormal (released AlphaPose & ML0_edge)
     tracks_map: dict[tuple[str, str], list[dict[int, tuple[np.ndarray, np.ndarray]]]] = {}

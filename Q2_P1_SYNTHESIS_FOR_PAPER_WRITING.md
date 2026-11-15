@@ -201,6 +201,20 @@ We systematically tested four architectural/training proposals on top of `B1_LoR
 5. **Physical Raspberry Pi 5 Live Benchmark of `E08` Scorers (2,880 frames, 4 threads, `Cache-C1+Guard`):**
    - With `Cache-C1+Guard`, **`P_C_IAC_Flow` achieves `25.45 FPS` (`> 24 FPS` real-time!), `5.56 ms` scoring, `419 ms` p99 wait, `0.191 J/frame`, and `67.51%` live on-time Pi 5 AUC** (beating `B1_LoRaD` `63.48%` by **`+4.03 pt`** and `TrajVAD-P` `55.71%` by **`+11.80 pt`** on the live Pi 5 stream!), while **`P_ABC` achieves the highest live Pi 5 on-time AUC (`68.02%` at `23.44 FPS`, `420 ms` p99 wait, `0x0` throttling)**.
 
+### 5.6 `Q2-P1-E09` — Multi-Scale Bottleneck Flow (H1), Two-Tier `MPC-LoRaD` Workload Energy Profiling (H2), and Green Kinematic Training (H3) (`experiments/Q2-P1-E09_hypotheses_suite/`)
+1. **Hypothesis 1 (`MS-CTFlow-Bottleneck`, $d \in \{1,2,4\}$, $K=3$, `608` params):**
+   - **Short-Event Impulse Gain:** Lifts short-event (`<= 2.5 s`) causal `S4` AUC by **`+6.85 pt` on ShanghaiTech `ML0_edge` (`74.91% -> 81.76%`)**, `+0.79 pt` on SHT `released` (`78.51% -> 79.30%`), `+2.51 pt` on UBnormal `released` (`67.11% -> 69.62%`), and `+1.40 pt` on UBnormal `ML0_edge` (`74.06% -> 75.46%`), while showing that sustained walking trajectories (`> 2.5 s`) require dense $K=13$ taps (`76.05%` vs `72.12%`).
+2. **Hypothesis 2 (`Two-Tier MPC-LoRaD` — Tier 1 Scene Deep-Sleep + Tier 2 Per-Person Kinematic Extrapolation):**
+   - **Strategy A (Untouched Benchmark Accuracy):** Saves **`16.9%–44.0%`** of full pose calls on untouched ShanghaiTech (`107` clips) and **`46.1%–62.7%`** on untouched UBnormal (`211` clips) with **`|\Delta \text{AUC}| \le 0.06\%` (`-0.06` to `+0.02 pt`)**.
+   - **Physical Raspberry Pi 5 Workload-Dependent Energy & Thermal Profiling:**
+     - `Heavy_100pct`: `-23.6%` compute energy/frame (`0.319 -> 0.244 J`), throughput `16.4 -> 20.1 FPS`.
+     - `Medium_40pct`: **`-43.1%` board power (`5.34 W -> 3.04 W`)**, **`-85.2%` compute energy (`0.331 -> 0.049 J`; `-61.8%` stream energy `0.331 -> 0.127 J`)**, temperature **`-4.4°C` (`67.5°C -> 63.1°C`)**, throughput **`16.1 -> 62.2 FPS`**.
+     - `Sparse_10pct`: **`-55.4%` board power (`5.35 W -> 2.38 W`)**, **`-94.1%` compute energy (`0.332 -> 0.020 J`; `-70.2%` stream energy `0.333 -> 0.099 J`)**, temperature **`-6.0°C` (`67.7°C -> 61.7°C`)**, throughput **`16.1 -> 121.5 FPS`**.
+     - `StrategyB_Natural_Sparse`: **`-22.8%` compute energy/frame (`0.339 -> 0.262 J`)**, zero thermal throttling (`0x0`).
+3. **Hypothesis 3 (`Distillation-Free Green Kinematic Training`: $\mathcal{L}_{\text{NLL}} + \lambda_{\text{bone}}\mathcal{L}_{\text{bone}} + \lambda_{\text{smooth}}\mathcal{L}_{\text{smooth}} + \lambda_{\text{rec}}\mathcal{L}_{\text{rec}}$):**
+   - Unregularized direct training (`G1`, $\mathcal{L}_{\text{NLL}}$ only) suffers coordinate scale collapse (`pose_mse = 0.599–0.699`), dropping AUC by `-5.87 pt` on SHT (`70.42%`) and `-5.38 pt` on UBnormal (`55.54%`).
+   - Adding $\mathcal{L}_{\text{bone}} + \mathcal{L}_{\text{smooth}} + \mathcal{L}_{\text{rec}}$ (`G2`) prevents collapse (`pose_mse = 0.0012–0.0471`), **beats the 83M-AlphaPose Teacher-Distilled baseline (`G0`) on UBnormal by `+3.79 pt` causal `S4` (`60.92% -> 64.71%`) and `+2.97 pt` offline `S0` (`58.37% -> 61.34%`)** (`+9.17 pt` over `G1`), and reaches `77.80%` `S0` / `73.80%` `S4` (`76.98%` short-event AUC) on SHT while cutting training time by **`1,150x–1,438x` (`877 min -> 0.61–0.76 min`)** and GPU energy/CO2 by **`99.98%` (`3.655 kWh -> 0.0005 kWh`, `1.41 kg -> 0.0002 kg CO2e`, `$10.82 -> $0.0025`)**!
+
 ---
 
 ## 6. Artifact & Figure Map for Writing
