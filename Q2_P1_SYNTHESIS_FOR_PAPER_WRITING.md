@@ -165,13 +165,53 @@ Edge deployment of skeleton-based Video Anomaly Detection (VAD)—specifically a
 
 ---
 
-## 5. Artifact & Figure Map for Writing
-- **Configs & Reports:** `experiments/Q2-P1-E0{0..5}_*/{plan.md,config.yaml,report.md,summary.json,results.csv}`
-- **Generated Figures (ready to embed/redraw):**
-  - `experiments/Q2-P1-E03_ablation/fig_ShanghaiTech_matched_cost_curves.png`
-  - `experiments/Q2-P1-E03_ablation/fig_UBnormal_matched_cost_curves.png`
-  - `experiments/Q2-P1-E05_confirmation/fig_ShanghaiTech_ladder.png`
-  - `experiments/Q2-P1-E05_confirmation/fig_UBnormal_ladder.png`
-  - `experiments/Q2-P1-E05_confirmation/fig_c2_queue_traces.png`
-  - `experiments/Q2-P1-E05_confirmation/fig_vm_traces.png`
-- **Unit Test Coverage:** `205` passing tests across `experiments/tests/test_q2_p1_e0{0..5}.py`.
+## 5. Physical Raspberry Pi 5 Validation (`Pi5_huang_repro`, `Pi5_suite`) & Extended Scorer/Tracker Experiments (`E06`, `E07`, `E08`)
+
+### 5.1 Physical Raspberry Pi 5 Reproduction of Huang et al. (2026) vs. Our Pipeline (`experiments/Q2-P1-Pi5_huang_repro/`)
+All runs executed in isolation on **Raspberry Pi 5 Model B Rev 1.1** (`4x Cortex-A76 @ 2.4 GHz`, `7.87 GiB` RAM, `vcgencmd get_throttled = 0x0`, 4 threads) on ShanghaiTech (`856x480`, `24.0 fps` arrival = `41.67 ms/frame` deadline):
+- **`Huang_RPi_PyTorch_640` (Stock PyTorch `640x640` + Default BoT-SORT):** `162.86 ms/frame` (**`6.14 FPS`** vs paper `3.2 FPS`; `pose 154.14 ms` vs paper `149.4 ms`, `track 0.61 ms`, `score 5.12 ms`), `6.04 W` PMIC power (paper `6.3 W`), `0.984 J/frame`, `70.0°C` mean / `73.8°C` max, `p99 wait = 28,682.6 ms` (`87.5%` late drops) $\to$ **Real-time Pi 5 delivered AUC collapses to `53.32%`** (vs `68.53%` offline).
+- **`Huang_RPi_Star_NCNN_320x320` (Stock NCNN FP16 `320x320`):** `27.35 ms/frame` (**`36.57 FPS`** vs paper `17.7 FPS`; `pose 20.06 ms` vs paper `24.8 ms`), `5.38 W` (paper `6.07 W`), `0.147 J/frame`, `p99 wait = 18.0 ms` (`50.81 FPS` at `192x320` letterbox). Keeps up with 24 FPS, **but `320x320` resolution blinds the detector to small people, capping AUC at `57.28%` offline / `59.18%` causal!**
+- **`Stock_NCNN_384x640` & `Ours_ML0_NCNN_640_FullRate` (`K=1`, No Cache):** Take `56.95 ms` (**`17.56 FPS`**) and `60.23 ms` (**`16.60 FPS`**) on the physical Pi 5 (`pose 48.7–48.9 ms`). Because `< 24.0 FPS`, both saturate the Pi 5 (`p99 wait = 10.8–13.2 s` in 30s; `46.8 s` in 120s), collapsing delivered AUC to **`47.46%–54.73%`**.
+- **`Ours_ML0_NCNN_640_CacheC1_Guard` (`W=1` and `Burst32`):** Skipping `29–34%` of static frames (`C1` check `1.76 ms` vs `48.9 ms` NCNN) cuts mean service time to **`35.16 ms` (`28.45 FPS`, `-41.6%` time & energy `0.192 J/frame`)**. Over the 2,880-frame (2.0-minute) sustained Pi 5 run (`Pi5_suite`), `Cache-C1+Guard` (`W=1`) achieves **`24.01 FPS`, `405.5 ms` p99 wait, `4.89 W`, `0.204 J/frame`, `64.49%` live AUC**, and **`Cache-C1+Guard-Burst32` (`W=32`) achieves `24.01 FPS`, `250.3 ms` p99 wait, `4.04 W`, `0.168 J/frame` (`-49%` energy), `3.14%` RSS growth, `0x0` throttling, and `74.19%` live Pi 5 delivered AUC (`+26.73` points over unguarded `Fixed-K1`)!**
+
+### 5.2 Physical Pi 5 Stage Profile & Cortex-A76 INT8 vs. NCNN FP16 (`experiments/Q2-P1-Pi5_suite/`)
+- **86 Isolated Stage Cells on Pi 5:** `ML0 @640` NCNN FP16 scales from `73.90 ms` (`0.303 J`, `4.10 W`) at `T=1` to `51.65 ms` (`T=2`), `46.72 ms` (`T=3`), and `46.29 ms` (`0.247 J`, `5.34 W`) at `T=4` (`1.60x` speedup). `MLP @640` (P2 head) takes `108.71 ms` (`0.618 J`) at `T=4` (`2.35x` slower). `stock @800` takes `76.74 ms` (`0.454 J`). H.264 `grab+retrieve` (`T=4`) is `1.38 ms` (SHT) / `4.10 ms` (UB). `BoT-SORT` (`T=1`) is `0.65 ms` (default) / `0.78 ms` (locked 2-stage). `STG-NF` (`T=4`) is `4.61 ms` (`N=1` window) to `14.64 ms` (`N=24`).
+- **Why ONNX Runtime INT8 Loses on Cortex-A76 (`E04` on Pi 5):** Because Cortex-A76 lacks `i8mm` (having only `asimddp`), `ORT INT8` is slower than `NCNN FP16` at `T=1` (`88.15 ms` vs `73.59 ms`, `0.83x`) and `T=2` (`55.40 ms` vs `50.95 ms`, `0.92x`), ties at `T=3` (`48.29` vs `48.13 ms`), and at `T=4` (`43.77` vs `46.43 ms`) draws **`+1.00 W` higher board power (`6.81 W` vs `5.81 W`)**, consuming **`+11%` MORE energy per frame (`0.298 J` vs `0.270 J`)** than `NCNN FP16`!
+
+### 5.3 `Q2-P1-E06` — `LoRaD` Causal Pose Flow Reproduction & Streaming Normalization Audit (`experiments/Q2-P1-E06_lorad_causal_flow/`)
+- **Window-Normalized `LoRaD` (`A2`):** Left-padded causal temporal convolutions match retrained symmetric `STG-NF` (`A1`) within `+0.24 [+0.01, +0.46] pt` (`S4`: `80.33%` vs `80.20%` on released poses; `76.54%` vs `76.86%` on `ML0` edge poses; `60.26%` vs `59.63%` on UBnormal `ML0`).
+- **Why True $O(1)$ Circular-Buffer Streaming (`A3s`) Fails:** Freezing per-frame prefix normalization (`N1`) so past convolutional states in the circular buffer do not have to be recomputed when the window shifts causes **`S4` AUC to drop by `-3.97 pt` on `ML0` (`76.86% -> 72.89%`)** and **`-5.26 pt` on released poses (`80.85% -> 75.59%`)**. Thus, per-window normalization (`N0`) + bit-exact raw `(x,y,conf)` window sharing (`E00` R5) is strictly superior.
+
+### 5.4 `Q2-P1-E07` — `YOLO26-pose` $\to$ `TrackTrack` (CVPR 2025) $\to$ `{STG-NF, LoRaD, TrajVAD-T, TrajVAD-P (ECCV 2026)}` (`experiments/Q2-P1-E07_yolo26_tracktrack_trajvadp/`)
+- **`TrackTrack` vs. `BoT-SORT` (2-stage):** After dev-tuning `TrackTrack` (`c=0.20, low=0.05, match=0.80`), `TrackTrack` never loses to `BoT-SORT` and is significantly better in `10/28` cells (`+0.3` to `+1.91 pt`), achieving the highest cross-dataset confirmation `S4` mean (**`70.33%`**: **`76.36%` SHT + `64.30%` UBnormal** with `ML0 + TrackTrack + STG-NF`, gaining **`+1.91 pt` on UBnormal** over `BoT-SORT`!).
+- **Frontend Dominance (`ML0` vs. `YOLO26n-pose`):** `ML0 @640` outperforms `YOLO26n-pose (e2e)` by **`+14.14 [-19.1, -9.7]* pt` on SHT confirmation (`76.36%` vs `62.22%`)** (`YOLO26 o2m` is `64.38%`).
+- **`TrajVAD-P` (ECCV 2026) vs. `STG-NF` / `LoRaD`:** While `TrajVAD-P` (`757K` params) beats trajectory-only `TrajVAD-T` (`211K` params) by `+1.5 pt`, its pose-only port trails `STG-NF`/`LoRaD` (`0.6K` params) by `3.7–5.1 pt` on SHT and costs **`17.4–27.9 ms/frame` for scoring on the Raspberry Pi 5** (collapsing unguarded `ML0 + TrackTrack + TrajVAD-P` to `12.3 FPS` and `109.5 s` queue wait; rescued by `Cache-C1+Guard` to `20.0–25.1 FPS` and `479–487 ms` wait).
+
+### 5.5 `Q2-P1-E08` — Testing `LoRaD` Architectural & Loss Proposals (`P_A`, `P_B`, `P_C`, `P_D`, `P_ABC`) (`experiments/Q2-P1-E08_lorad_gaps_proposals/`)
+We systematically tested four architectural/training proposals on top of `B1_LoRaD` across 24 trained models (3 seeds $\times$ 2 datasets) and 14 physical Raspberry Pi 5 runs:
+1. **`P_A_MS_CTFlow` (Multi-Scale Causal Dilated TCN $d \in \{1, 2, 4\}$, `1,592` params):**
+   - **Targeted Gain:** Raises recall on **short events (`<= 2.5 s`) by `+4.9 pp` (`39.4% -> 44.2%`)** at matched false-alarm rate, and improves **UBnormal dev/all on `released` (`70.35% -> 70.88%`) and `YOLO26` (`61.14% -> 61.53%`)**.
+   - **Trade-off (`H_A` Refuted on Pooled Confirmation):** Over-parameterizing the temporal receptive field (`2.58x` params) degrades sustained-event SHT confirmation AUC (`75.99% -> 73.93%`, pooled mean `-1.51 pt`) and increases Pi 5 scorer latency from `5.05 ms` to `7.97 ms`.
+2. **`P_B_RevMargin` (Bidirectional Reverse Reconstruction + Contrastive Margin Loss, `616` params):**
+   - **Mathematical & Empirical Finding (`H_B` Refuted):** Training diagnostics (`training_diagnostics.csv`) prove that because affine coupling + ActNorm + permutation layers in `STG-NF`/`LoRaD` are **analytically invertible up to floating-point round-off**, the bidirectional reconstruction term $\|X_y - f^{-1}(f(X))_y\|_2^2$ is **identically `0.00000000`** (`< 10^{-14}`)! Thus, Huang et al.'s reverse-MSE loss provides zero gradient in an exact invertible flow, and adding a synthetic contrastive margin hinge term (`lambda_2`) distorts the Gaussian density Calibration, degrading confirmation AUC by `-3.48 pt` and raising `FA/h` by `+45.0`.
+3. **`P_C_IAC_Flow` (Interaction-Aware Context Nodes: Virtual Box-Velocity + Social Proximity Graph, `616` params):**
+   - **Targeted Gain:** On **ShanghaiTech**, `P_C` **reduces false alarms at 50% recall by `-14.0 [-30.1, -3.3]* FA/h` (`49.1 -> 35.0 FA/h`, best of all models!)**, improves **high-crowd AUC by `+0.63 pt` (`71.82% -> 72.45%`)**, improves short-event recall by `+2.2 pp`, and beats `TrajVAD-P` by **`+4.62 [+2.0, +7.0]* pt`** with `1,200x` fewer parameters (`616` vs `757,338`). On **UBnormal (`YOLO26` confirmation)**, `P_C` jumps `S4` AUC from **`61.11% -> 62.91%` (`+1.80 pt`)**.
+   - **Trade-off (`H_C` Not Supported on Pooled Mean):** On noisy edge tracks (`ML0` UBnormal), nearest-neighbor social proximity jitter raises UBnormal `FA/h`, leaving the 2-dataset pooled confirmation mean at `-0.71 pt` (CI includes 0).
+4. **`P_D_ConfSmooth` (Confidence-Weighted Buffer Interpolation):** Preserves pooled AUC within `+0.01 pt` (`68.61%` vs `68.60%`) across every stratum (`+-0.03 pt`).
+5. **Physical Raspberry Pi 5 Live Benchmark of `E08` Scorers (2,880 frames, 4 threads, `Cache-C1+Guard`):**
+   - With `Cache-C1+Guard`, **`P_C_IAC_Flow` achieves `25.45 FPS` (`> 24 FPS` real-time!), `5.56 ms` scoring, `419 ms` p99 wait, `0.191 J/frame`, and `67.51%` live on-time Pi 5 AUC** (beating `B1_LoRaD` `63.48%` by **`+4.03 pt`** and `TrajVAD-P` `55.71%` by **`+11.80 pt`** on the live Pi 5 stream!), while **`P_ABC` achieves the highest live Pi 5 on-time AUC (`68.02%` at `23.44 FPS`, `420 ms` p99 wait, `0x0` throttling)**.
+
+---
+
+## 6. Artifact & Figure Map for Writing
+- **Configs & Reports:**
+  - `experiments/Q2-P1-E0{0..8}_*/{plan.md,config.yaml,report.md,summary.json,results.csv}`
+  - `experiments/Q2-P1-Pi5_huang_repro/{report.md,summary.json}`
+  - `experiments/Q2-P1-Pi5_suite/{plan.md,config.yaml,report.md,summary.json,results.csv,stage_timings_pi5.csv}`
+- **Onboarding & Positioning Guides:**
+  - `START_HERE_LEARNING_GUIDE.md`
+  - `PAPER_POSITIONING_AND_CHECKPOINT.md`
+  - `LORAD_GAPS_EXPERIMENT_PLAN.md`
+  - `~/Desktop/DRAFT_PAPER_Q2_Edge_Skeleton_VAD.md`
+- **Unit Test Coverage:** `273` passing tests across `experiments/tests/test_q2_p1_*.py` and `tests/test_app_catalog.py`.
+
