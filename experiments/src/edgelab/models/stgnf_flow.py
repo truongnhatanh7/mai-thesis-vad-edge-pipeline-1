@@ -248,7 +248,7 @@ class CouplingFlow(nn.Module):
             z = step.reverse(z, condition, valid)
         return z
 
-    def forward(self, x: torch.Tensor, provenance: torch.Tensor | None = None):
+    def forward(self, x: torch.Tensor, provenance: torch.Tensor | None = None, label: torch.Tensor | None = None):
         """-> (z, nll in bits per dimension, per sample). Same normalisation as STG_NF.normal_flow."""
         z, logdet = self.encode(x, provenance)
         mean = torch.full_like(z, self.prior_mean)
