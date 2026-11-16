@@ -329,13 +329,19 @@ def match_tracks(tracks_out: np.ndarray, boxes: np.ndarray, keypoints: np.ndarra
 class PipelineRunner:
     """Holds pre-loaded detector models for T in {2, 3, 4} so switching threads during RL takes 0.0 ms."""
 
-    def __init__(self, spec: dict[str, Any], stgnf_model: torch.nn.Module, lorad_model: torch.nn.Module):
+    def __init__(self, spec: dict[str, Any], stgnf_model: torch.nn.Module, lorad_model: torch.nn.Module, msctflow_model: torch.nn.Module | None = None):
         self.spec = spec
         self.name = spec["name"]
         self.backend = spec["backend"]
         self.two_stage = bool(spec.get("two_stage", False))
         self.use_cache = bool(spec.get("use_cache", False))
-        self.scorer_model = lorad_model if spec.get("scorer") == "lorad" else stgnf_model
+        sc_type = spec.get("scorer", "stgnf")
+        if sc_type == "lorad":
+            self.scorer_model = lorad_model
+        elif sc_type == "msctflow" and msctflow_model is not None:
+            self.scorer_model = msctflow_model
+        else:
+            self.scorer_model = stgnf_model
 
         self.ncnn_by_t: dict[int, NcnnPose] = {}
         self.yolo_pt = None
@@ -584,6 +590,32 @@ def get_pipelines_spec() -> list[dict[str, Any]]:
             "offline_auc_sht": 68.53,
             "causal_ideal_auc_sht": 66.03,
         },
+        {
+            "name": "6a_LoRaD_MSCTFlow_Cached",
+            "title": "LoRaD + Multi-Scale Causal Dilated Flow (MS-CTFlow d=1,2,4) + Cache",
+            "backend": "ncnn",
+            "model_dir": MODELS_ROOT / "yolov8n-pose-640-384x640-ncnn",
+            "two_stage": False,
+            "use_cache": True,
+            "scorer": "msctflow",
+            "context": {"is_cached_bursty": 1.0, "res_scale": 1.0},
+            "eval_frames": 240,
+            "offline_auc_sht": 80.65,
+            "causal_ideal_auc_sht": 76.01,
+        },
+        {
+            "name": "6b_Ours_ML0_MSCTFlow_Cached",
+            "title": "Ours Fine-Tuned ML0 + Multi-Scale Causal Flow (MS-CTFlow d=1,2,4) + Cache",
+            "backend": "ncnn",
+            "model_dir": MODELS_ROOT / "exp020/ML0-640-384x640-ncnn",
+            "two_stage": True,
+            "use_cache": True,
+            "scorer": "msctflow",
+            "context": {"is_cached_bursty": 1.0, "res_scale": 1.0},
+            "eval_frames": 240,
+            "offline_auc_sht": 80.65,
+            "causal_ideal_auc_sht": 76.01,
+        },
     ]
 
 
@@ -603,6 +635,7 @@ def main() -> None:
     ap.add_argument("--out-dir", type=Path, default=PI_DATA_DIR / "q2-p1-e10-pi5")
     ap.add_argument("--rl-steps", type=int, default=18)
     ap.add_argument("--step-frames", type=int, default=12)
+    ap.add_argument("--only-pipelines", type=str, default="", help="Comma-separated pipeline names to run (merges into existing json)")
     ap.add_argument("--tracking-uri", type=str, default=os.environ.get("MLFLOW_TRACKING_URI", "http://127.0.0.1:5000"))
     args = ap.parse_args()
 
@@ -616,11 +649,17 @@ def main() -> None:
     act_static_pin3 = next(a for a in actions if a.governor == "ondemand" and a.threads == 3 and a.pin_isolated)
 
     stgnf_model = load_model(STGNF_CKPT)
-    # Build causal LoRaD flow for LoRaD pipelines
+    # Build causal LoRaD flow and Multi-Scale Causal Dilated Flow (MS-CTFlow d=1,2,4)
     from edgelab.models.stgnf_flow import build_flow
+    from edgelab.models.lorad_gaps import build_gap_flow
 
     lorad_model = build_flow("causal", 24).eval()
     for m in lorad_model.modules():
+        if hasattr(m, "inited"):
+            m.inited = True
+
+    msctflow_model = build_gap_flow("P_A", 24).eval()
+    for m in msctflow_model.modules():
         if hasattr(m, "inited"):
             m.inited = True
 
@@ -636,14 +675,28 @@ def main() -> None:
     # Start realistic background camera/RTSP daemon on Core 0
     bg_daemon = BackgroundCameraIngestDaemon().start()
 
-    all_pipeline_results: list[dict[str, Any]] = []
-    rl_trajectories: dict[str, list[dict[str, Any]]] = {}
+    summary_path = args.out_dir / "pi5_e10_summary.json"
+    existing_results: list[dict[str, Any]] = []
+    existing_trajs: dict[str, list[dict[str, Any]]] = {}
+    if summary_path.exists():
+        try:
+            old_data = json.loads(summary_path.read_text())
+            existing_results = old_data.get("results", [])
+            existing_trajs = old_data.get("rl_trajectories", {})
+        except Exception:
+            pass
+
+    only_set = {x.strip() for x in args.only_pipelines.split(",") if x.strip()}
+    all_pipeline_results: list[dict[str, Any]] = [r for r in existing_results if only_set and r["pipeline"] not in only_set]
+    rl_trajectories: dict[str, list[dict[str, Any]]] = {k: v for k, v in existing_trajs.items() if only_set and k not in only_set}
 
     try:
         for p_spec in get_pipelines_spec():
             pname = p_spec["name"]
+            if only_set and pname not in only_set:
+                continue
             print(f"\n[Pi5-E10] === Pipeline: {pname} ({p_spec['title']}) ===", flush=True)
-            runner = PipelineRunner(p_spec, stgnf_model, lorad_model)
+            runner = PipelineRunner(p_spec, stgnf_model, lorad_model, msctflow_model)
             ctx_vec = p_spec["context"]
 
             # 1. Fast-Feedback Online LinUCB RL Tuning Loop (e.g. 18 steps x 12 frames = ~8-12 seconds!)

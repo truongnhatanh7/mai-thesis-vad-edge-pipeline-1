@@ -1,6 +1,6 @@
 # Q2-P1-E10 — Fast-Feedback Contextual Bandit / RL OS Tuning (`FastOS-RL`) on Physical Raspberry Pi 5
 
-- **Generated:** `2026-11-15 23:11:00`
+- **Generated:** `2026-11-16 07:10:43`
 - **Hardware:** `Raspberry Pi 5 Model B Rev 1.1` (`4x Cortex-A76 @ 2.4 GHz`, 8 GB RAM)
 - **Status:** **COMPLETED (6 Pipelines x 3 OS Policies + 24-Step Fast-Feedback RL Loop)**
 - **MLflow Experiment:** `Q2-P1-E10-RL-OS-Tuning` (`http://127.0.0.1:5000`)
@@ -38,6 +38,12 @@ Evaluating an entire anomaly dataset (`40,791` frames = `28.3 minutes`) per RL s
 | `5b_Huang_et_al_RPi_PyTorch640` | **`OS_Default (ondemand|T4|unpinned)`** | `ondemand|T4|unpinned_nice0` | `0.0s` | `150.1 / 151.1` | **`6.66`** | **`+0.0%`** | **`100.0%`** (`+0.0 pp`) | `2400` | `95.1%` | `2.69W / 0.403J` | `68.53 / 66.03` | **`53.76`** (`+0.00`) |
 | `5b_Huang_et_al_RPi_PyTorch640` | **`OS_Static_EXP004 (ondemand|T3|pin3)`** | `ondemand|T3|pin3_nice-10` | `0.0s` | `260.6 / 270.9` | **`3.84`** | **`-42.3%`** | **`100.0%`** (`+0.0 pp`) | `2300` | `61.7%` | `2.48W / 0.647J` | `68.53 / 66.03` | **`53.57`** (`-0.19`) |
 | `5b_Huang_et_al_RPi_PyTorch640` | **`FastOS_RL_Tuned (LinUCB Learned)`** | `performance|T4|pin4_nice-10` | `18.7s` | `149.5 / 151.9` | **`6.69`** | **`+0.5%`** | **`100.0%`** (`+0.0 pp`) | `2400` | `95.1%` | `2.56W / 0.383J` | `68.53 / 66.03` | **`53.76`** (`+0.00`) |
+| `6a_LoRaD_MSCTFlow_Cached` | **`OS_Default (ondemand|T4|unpinned)`** | `ondemand|T4|unpinned_nice0` | `0.0s` | `27.0 / 65.4` | **`36.98`** | **`+0.0%`** | **`30.4%`** (`+0.0 pp`) | `1500` | `44.8%` | `2.25W / 0.061J` | `80.65 / 76.01` | **`73.59`** (`+0.00`) |
+| `6a_LoRaD_MSCTFlow_Cached` | **`OS_Static_EXP004 (ondemand|T3|pin3)`** | `ondemand|T3|pin3_nice-10` | `0.0s` | `39.4 / 111.6` | **`25.40`** | **`-31.3%`** | **`61.2%`** (`+30.8 pp`) | `1500` | `46.2%` | `2.25W / 0.089J` | `80.65 / 76.01` | **`71.15`** (`-2.44`) |
+| `6a_LoRaD_MSCTFlow_Cached` | **`FastOS_RL_Tuned (LinUCB Learned)`** | `performance|T4|pin4_nice-10` | `6.0s` | `24.7 / 67.3` | **`40.46`** | **`+9.4%`** | **`30.0%`** (`-0.4 pp`) | `2400` | `44.0%` | `2.39W / 0.059J` | `80.65 / 76.01` | **`73.63`** (`+0.04`) |
+| `6b_Ours_ML0_MSCTFlow_Cached` | **`OS_Default (ondemand|T4|unpinned)`** | `ondemand|T4|unpinned_nice0` | `0.0s` | `34.7 / 72.2` | **`28.80`** | **`+0.0%`** | **`30.4%`** (`+0.0 pp`) | `1800` | `63.3%` | `2.37W / 0.082J` | `80.65 / 76.01` | **`73.59`** (`+0.00`) |
+| `6b_Ours_ML0_MSCTFlow_Cached` | **`OS_Static_EXP004 (ondemand|T3|pin3)`** | `ondemand|T3|pin3_nice-10` | `0.0s` | `79.1 / 125.3` | **`12.64`** | **`-56.1%`** | **`93.3%`** (`+62.9 pp`) | `2000` | `60.6%` | `2.38W / 0.188J` | `80.65 / 76.01` | **`62.48`** (`-11.11`) |
+| `6b_Ours_ML0_MSCTFlow_Cached` | **`FastOS_RL_Tuned (LinUCB Learned)`** | `performance|T4|pin4_nice-10` | `5.8s` | `33.5 / 69.8` | **`29.85`** | **`+3.6%`** | **`30.0%`** (`-0.4 pp`) | `2400` | `62.3%` | `2.43W / 0.081J` | `80.65 / 76.01` | **`73.63`** (`+0.04`) |
 
 ---
 

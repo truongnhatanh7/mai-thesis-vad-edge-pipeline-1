@@ -140,7 +140,7 @@ def render_e10_report(data: dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
-def run_e10(rl_steps: int = 16, step_frames: int = 12) -> dict[str, Any]:
+def run_e10(rl_steps: int = 16, step_frames: int = 12, only_pipelines: str = "") -> dict[str, Any]:
     EXP_DIR.mkdir(parents=True, exist_ok=True)
     WORK_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -150,24 +150,28 @@ def run_e10(rl_steps: int = 16, step_frames: int = 12) -> dict[str, Any]:
         capture_output=True,
     )
 
-    print("[E10] Syncing `q2_p1_e10_pi5.py` and `stgnf_flow.py` to Raspberry Pi 5 ...", flush=True)
-    subprocess.run(
-        ["scp", str(EXPERIMENTS_ROOT / "src/edgelab/models/stgnf_flow.py"), "nanh@raspberrypi.local:~/edgelab/src/edgelab/models/stgnf_flow.py"],
-        check=True,
-        timeout=30,
-    )
-    subprocess.run(
-        ["scp", str(EXPERIMENTS_ROOT / "src/edgelab/analysis/q2_p1_e10_pi5.py"), "nanh@raspberrypi.local:~/edgelab/src/edgelab/analysis/q2_p1_e10_pi5.py"],
-        check=True,
-        timeout=30,
-    )
+    print("[E10] Syncing `q2_p1_e10_pi5.py`, `stgnf_flow.py`, `lorad.py`, `lorad_gaps.py`, `augment.py`, `segments.py` to Raspberry Pi 5 ...", flush=True)
+    for rel in [
+        "src/edgelab/models/stgnf_flow.py",
+        "src/edgelab/models/lorad.py",
+        "src/edgelab/models/lorad_gaps.py",
+        "src/edgelab/pose/augment.py",
+        "src/edgelab/pose/segments.py",
+        "src/edgelab/analysis/q2_p1_e10_pi5.py",
+    ]:
+        subprocess.run(
+            ["scp", str(EXPERIMENTS_ROOT / rel), f"nanh@raspberrypi.local:~/edgelab/{rel}"],
+            check=True,
+            timeout=30,
+        )
 
-    print(f"[E10] Launching Fast-Feedback LinUCB OS Tuner on Raspberry Pi 5 (rl_steps={rl_steps}, step_frames={step_frames}) ...", flush=True)
+    only_arg = f"--only-pipelines {only_pipelines}" if only_pipelines else ""
+    print(f"[E10] Launching Fast-Feedback LinUCB OS Tuner on Raspberry Pi 5 (rl_steps={rl_steps}, step_frames={step_frames} {only_arg}) ...", flush=True)
     subprocess.run(
         [
             "ssh",
             "nanh@raspberrypi.local",
-            f"cd ~/edgelab && MLFLOW_TRACKING_URI=http://127.0.0.1:5000 EDGELAB_MACHINE=pi5 ~/.local/bin/uv run --no-sync python -u -m edgelab.analysis.q2_p1_e10_pi5 --rl-steps {rl_steps} --step-frames {step_frames} --out-dir ~/thesis-data/q2-p1-e10-pi5",
+            f"cd ~/edgelab && MLFLOW_TRACKING_URI=http://127.0.0.1:5000 EDGELAB_MACHINE=pi5 ~/.local/bin/uv run --no-sync python -u -m edgelab.analysis.q2_p1_e10_pi5 --rl-steps {rl_steps} --step-frames {step_frames} {only_arg} --out-dir ~/thesis-data/q2-p1-e10-pi5",
         ],
         check=True,
     )
@@ -227,8 +231,9 @@ def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--rl-steps", type=int, default=16)
     ap.add_argument("--step-frames", type=int, default=12)
+    ap.add_argument("--only-pipelines", type=str, default="")
     args = ap.parse_args()
-    run_e10(rl_steps=args.rl_steps, step_frames=args.step_frames)
+    run_e10(rl_steps=args.rl_steps, step_frames=args.step_frames, only_pipelines=args.only_pipelines)
 
 
 if __name__ == "__main__":
